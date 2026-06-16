@@ -29,7 +29,7 @@ def base_elo(team):
     return elo
 
 
-def _expected_gd(team, opp, played):
+def _expected_gd(team, opp):
     """基于 Elo 的期望净胜球（用于吸收真实表现）"""
     diff = base_elo(team) - base_elo(opp)
     # 每 100 Elo 差约 0.55 球净胜
@@ -39,7 +39,7 @@ def _expected_gd(team, opp, played):
 def live_elo(team, played_per_team=None):
     """动态实力：基础 Elo + 已踢真实表现的修正。
     played_per_team: {team: [match,...]} 来自 live_data.played_games_per_team
-    每场修正 Δ = K × (实际净胜 − 期望净胜)，K=40"""
+    每场修正 Δ = K × (实际净胜 − 期望净胜)，K=16"""
     if not played_per_team or team not in played_per_team:
         return base_elo(team)
 
@@ -55,7 +55,7 @@ def live_elo(team, played_per_team=None):
         opp = m["team2"] if is_home else m["team1"]
         hg, ag = m["hg"], m["ag"]
         actual_gd = (hg - ag) if is_home else (ag - hg)
-        exp_gd = _expected_gd(team, opp, games)
+        exp_gd = _expected_gd(team, opp)
         elo += K * (actual_gd - exp_gd)
     _elo_cache[team] = (elo, key)
     return elo
@@ -70,6 +70,31 @@ def win_prob(a, b, played_per_team=None):
     """A 队胜率期望 (0~1)"""
     ea = 1.0 / (1.0 + 10 ** ((elo_of(b, played_per_team) - elo_of(a, played_per_team)) / 400.0))
     return ea
+
+
+def predicted_scoreline(home, away):
+    """赛前最可能比分（整数）：仅用赛前基础 Elo 的期望进球四舍五入。
+    刻意不使用赛事内任何已踢结果（也不用动态 Elo），这样拿它和真实赛果对比、
+    计算预测准确率时不存在信息泄漏——相当于一次诚实的"赛前预测复盘"。
+    返回 (home_goals, away_goals)。"""
+    ea = win_prob(home, away)            # 赛前基础 Elo 胜率（played_per_team=None）
+    total = 2.7                          # 小组赛场均总进球，与 play_match 保持一致
+    lam_home = max(0.15, total * ea)
+    lam_away = max(0.15, total * (1 - ea))
+    return round(lam_home), round(lam_away)
+
+
+def predicted_scoreline(home, away, played_per_team=None):
+    """最可能比分（整数）：按期望进球四舍五入，与胜率方向天然一致。
+    - played_per_team=None（默认）：仅用赛前基础 Elo。复盘准确率用此口径，
+      刻意不看赛事内结果 → 无信息泄漏。
+    - 传入 played_per_team：用动态 Elo（含已踢真实表现），用于首页未踢比赛展示。
+    返回 (home_goals, away_goals)。"""
+    ea = win_prob(home, away, played_per_team)
+    total = 2.7                          # 小组赛场均总进球，与 play_match 保持一致
+    lam_home = max(0.15, total * ea)
+    lam_away = max(0.15, total * (1 - ea))
+    return round(lam_home), round(lam_away)
 
 
 def sample_goals(rng, lam):
@@ -286,7 +311,7 @@ def simulate_knockout(rng, standings, third_assignment, played_per_team=None):
         if away_seed.startswith("3?"):
             away = third_assignment.get(m["id"])
 
-        ko = m["round"] != "F" or True  # 所有淘汰赛都需决出胜者
+        # 所有淘汰赛都需决出胜者（平局加时/点球）
         ga, gb, pen_winner = play_match(rng, home, away, ko=True, played_per_team=played_per_team)
         winner, loser = match_winner(ga, gb, pen_winner, home, away)
 

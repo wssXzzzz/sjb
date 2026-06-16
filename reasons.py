@@ -77,11 +77,8 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag):
     # ---- 要点1：FIFA 排名对比 ----
     h_rank, a_rank = h_meta["rank"], a_meta["rank"]
     rank_diff = abs(h_rank - a_rank)
-    if h_rank < a_rank:
-        rank_txt = f"FIFA排名：{fav_zh}第{min(h_rank,a_rank)}位 vs {_team_zh(away if fav==home else home)}第{max(h_rank,a_rank)}位"
-    else:
-        rank_txt = f"FIFA排名：{fav_zh}第{min(h_rank,a_rank)}位 vs {_team_zh(away if fav==home else home)}第{max(h_rank,a_rank)}位"
-    points.append(rank_txt)
+    opp_zh = _team_zh(away if fav == home else home)
+    points.append(f"FIFA排名：{fav_zh}第{min(h_rank,a_rank)}位 vs {opp_zh}第{max(h_rank,a_rank)}位")
 
     # ---- 要点2：实力推导（Elo→胜率因果链）----
     points.append(f"实力分：{fav_zh} {max(h_elo,a_elo)} vs {_team_zh(away if fav==home else home)} {min(h_elo,a_elo)}（差{abs(elo_diff)}→胜率{fav_pct}%）")

@@ -104,6 +104,9 @@ def build_view():
     # ---- 近期未踢比赛预测列表（总览页高亮）----
     upcoming = _build_upcoming(sim, live, played_per_team)
 
+    # ---- 复盘：赛前预测 vs 真实赛果 准确率 ----
+    accuracy = _build_accuracy(live)
+
     # ---- 淘汰赛阶段名单（夺冠页用）----
     # 16强 = R32 的 16 个胜者
     r16_teams = [r["winner"] for r in sim["ko_results"] if r["round"] == "R32"]
@@ -134,6 +137,7 @@ def build_view():
         "probs": probs_view,
         "champion_path": champion_path,
         "upcoming": upcoming,
+        "accuracy": accuracy,
         "round16": _team_list(r16_teams),
         "round8": _team_list(r8_teams),
         "round4": _team_list(r4_teams),
@@ -167,19 +171,67 @@ def _build_upcoming(sim, live, played_per_team, limit=16):
     for m in upcoming[:limit]:
         h, a = m["home"], m["away"]
         wp = P.win_prob(h, a, played_per_team)
-        reasons = R.generate_reasons(h, a, played_per_team, m["hg"], m["ag"])
+        # 首页展示用「最可能比分」（与胜率方向一致），而非单次随机模拟值，
+        # 避免出现「84% 胜率却预测 0-0」这类自相矛盾的观感。
+        phg, pag = P.predicted_scoreline(h, a, played_per_team)
+        reasons = R.generate_reasons(h, a, played_per_team, phg, pag)
         items.append({
             "group": m["group"], "md": m["md"],
             "home": h, "away": a,
             "home_zh": W.TEAMS[h]["zh"], "away_zh": W.TEAMS[a]["zh"],
             "home_flag": W.TEAMS[h]["flag"], "away_flag": W.TEAMS[a]["flag"],
-            "hg": m["hg"], "ag": m["ag"],
+            "hg": phg, "ag": pag,
             "home_win": round(100 * wp, 0),
             "away_win": round(100 * (1 - wp), 0),
             "date": m["date"], "time": m["time"], "venue": m.get("venue", ""),
             "reasons": reasons,
         })
     return items
+
+
+def _build_accuracy(live):
+    """复盘：把已踢真实赛果与「赛前实力预测」逐场对比，给出准确率指标。
+    预测仅用赛前基础 Elo（predicted_scoreline，不看结果）→ 诚实、无信息泄漏。
+    返回 {summary, matches}；离线或暂无完赛时 matches 为空。"""
+    rows = []
+    n = outcome_ok = exact_ok = goal_err = points = 0
+    for m in (live.get("matches") or []):
+        if not m.get("finished") or m.get("is_knockout") or m.get("hg") is None:
+            continue
+        t1, t2 = m["team1"], m["team2"]
+        rhg, rag = m["hg"], m["ag"]
+        phg, pag = P.predicted_scoreline(t1, t2)
+        real_sign = (rhg > rag) - (rhg < rag)
+        pred_sign = (phg > pag) - (phg < pag)
+        o_ok = (real_sign == pred_sign)
+        e_ok = (phg == rhg and pag == rag)
+        n += 1
+        outcome_ok += o_ok
+        exact_ok += e_ok
+        goal_err += abs(phg - rhg) + abs(pag - rag)
+        points += 3 if e_ok else (1 if o_ok else 0)
+        rows.append({
+            "group": m.get("group"), "date": m.get("date"),
+            "home": t1, "away": t2,
+            "home_zh": W.TEAMS[t1]["zh"], "away_zh": W.TEAMS[t2]["zh"],
+            "home_flag": W.TEAMS[t1]["flag"], "away_flag": W.TEAMS[t2]["flag"],
+            "real_hg": rhg, "real_ag": rag, "pred_hg": phg, "pred_ag": pag,
+            "outcome_correct": bool(o_ok), "exact_correct": bool(e_ok),
+        })
+    rows.sort(key=lambda x: (x["date"] or "", x["group"] or ""))
+    return {
+        "summary": {
+            "finished": n,
+            "outcome_correct": int(outcome_ok),
+            "exact_correct": int(exact_ok),
+            "outcome_pct": round(100 * outcome_ok / n) if n else 0,
+            "exact_pct": round(100 * exact_ok / n) if n else 0,
+            "goal_mae": round(goal_err / n, 2) if n else 0,
+            "points": points,
+            "max_points": n * 3,
+        },
+        "matches": rows,
+    }
 
 
 # 视图缓存：5 分钟（与 live_data 缓存对齐）
@@ -193,6 +245,17 @@ def get_view(force=False):
         _VIEW_CACHE["data"] = build_view()
         _VIEW_CACHE["ts"] = now
     return _VIEW_CACHE["data"]
+
+
+# 生产环境（gunicorn --preload）下在导入时预热缓存：
+# 主进程构建一次，fork 出的 worker 通过写时复制继承，首个请求即命中缓存。
+# 设 WARMUP=1 时启用；普通 import（如测试）不触发网络请求。
+if os.environ.get("WARMUP") == "1":
+    try:
+        print("预热预测缓存中...")
+        get_view()
+    except Exception as e:
+        print(f"预热失败（将在首个请求时重试）: {e}")
 
 
 @app.route("/")

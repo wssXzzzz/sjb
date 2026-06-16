@@ -278,6 +278,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 .card-h .ct .ic{font-size:16px;}
 .legend{display:flex;gap:12px;font-size:10.5px;color:var(--text-3);align-items:center;}
 .empty{text-align:center;padding:30px 16px;color:var(--text-3);font-size:13px;}
+
+/* 复盘 / 准确率 */
+.acc-hero{padding:22px 20px 18px;margin-bottom:14px;text-align:center;}
+.acc-big{font-size:48px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-1px;}
+.acc-big .u{font-size:24px;font-weight:700;}
+.acc-big-l{font-size:12.5px;color:var(--text-2);font-weight:600;margin-top:6px;}
+.acc-note{font-size:10.5px;color:var(--text-3);margin-top:8px;line-height:1.5;}
+.acc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;}
+.acc-stat{background:var(--chip);border-radius:15px;padding:11px 6px;}
+.acc-stat .v{font-size:17px;font-weight:800;color:var(--text-1);font-variant-numeric:tabular-nums;}
+.acc-stat .k{font-size:10px;color:var(--text-3);margin-top:3px;}
+.acc-row{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:14px;background:var(--chip);margin-bottom:6px;}
+.acc-row:last-child{margin-bottom:0;}
+.acc-grp{font-size:9.5px;font-weight:700;color:var(--text-3);background:var(--chip-2);padding:3px 6px;border-radius:7px;min-width:26px;text-align:center;flex:0 0 auto;}
+.acc-body{flex:1;min-width:0;}
+.acc-teams{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--text-strong-2);}
+.acc-teams .flag{font-size:14px;}
+.acc-teams .vs{color:var(--text-3);font-weight:500;font-size:10px;}
+.acc-scores{display:flex;gap:8px;margin-top:4px;}
+.acc-sc{font-size:10.5px;font-variant-numeric:tabular-nums;font-weight:700;padding:1px 7px;border-radius:7px;}
+.acc-sc.real{background:rgba(46,170,90,.16);color:var(--qual);}
+.acc-sc.pred{background:rgba(54,110,240,.12);color:#2a6fd6;}
+:root[data-theme="dark"] .acc-sc.pred{color:#8db4ff;}
+.acc-mark{font-size:17px;flex:0 0 auto;width:24px;text-align:center;}
+.acc-mark.bad{filter:grayscale(.2);}
 </style>
 </head>
 <body>
@@ -326,6 +351,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
   <button class="tab" data-view="groups" onclick="switchView('groups')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="2.6"/><circle cx="17" cy="7" r="2.6"/><circle cx="7" cy="17" r="2.6"/><circle cx="17" cy="17" r="2.6"/></svg>
     小组赛
+  </button>
+  <button class="tab" data-view="accuracy" onclick="switchView('accuracy')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+    复盘
   </button>
   <button class="tab" data-view="knockout" onclick="switchView('knockout')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 21V8a3 3 0 013-3h2M19 21V8a3 3 0 00-3-3h-2M9 5v4a3 3 0 003 3 3 3 0 003-3V5M12 12v9"/></svg>
@@ -552,6 +581,53 @@ function championHTML(){
   </div>`;
 }
 
+/* ============ 复盘 / 准确率 ============ */
+function accuracyHTML(){
+  const acc = V.accuracy || {summary:{}, matches:[]};
+  const s = acc.summary || {};
+  if(!acc.matches || !acc.matches.length){
+    return `<div class="view" id="view-accuracy">
+      <div class="glass empty" style="margin-top:8px;">还没有已完赛的比赛<br>开赛后这里会自动复盘预测准确率</div>
+    </div>`;
+  }
+  const rows = acc.matches.map(m=>{
+    const mark = m.exact_correct ? '🎯' : (m.outcome_correct ? '✅' : '❌');
+    const markCls = (m.exact_correct||m.outcome_correct) ? '' : 'bad';
+    return `<div class="acc-row">
+      <span class="acc-grp">${m.group||'-'}组</span>
+      <div class="acc-body">
+        <div class="acc-teams"><span class="flag">${m.home_flag}</span>${m.home_zh}<span class="vs">vs</span>${m.away_zh}<span class="flag">${m.away_flag}</span></div>
+        <div class="acc-scores">
+          <span class="acc-sc real">真实 ${m.real_hg}-${m.real_ag}</span>
+          <span class="acc-sc pred">预测 ${m.pred_hg}-${m.pred_ag}</span>
+        </div>
+      </div>
+      <span class="acc-mark ${markCls}">${mark}</span>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="view" id="view-accuracy">
+    <div class="glass-strong acc-hero">
+      <div class="acc-big">${s.outcome_pct}<span class="u">%</span></div>
+      <div class="acc-big-l">胜负判对率 · ${s.outcome_correct}/${s.finished} 场</div>
+      <div class="acc-stats">
+        <div class="acc-stat"><div class="v">${s.exact_correct}</div><div class="k">比分命中 (${s.exact_pct}%)</div></div>
+        <div class="acc-stat"><div class="v">${s.goal_mae}</div><div class="k">场均进球误差</div></div>
+        <div class="acc-stat"><div class="v">${s.points}<span style="font-size:11px;color:var(--text-3)">/${s.max_points}</span></div><div class="k">竞猜得分</div></div>
+      </div>
+      <div class="acc-note">📐 用<b>赛前实力预测</b>（仅 FIFA 排名 Elo，不看结果）对比真实赛果<br>命中比分 +3 分 · 仅猜对胜负 +1 分　🎯命中 ✅胜负对 ❌未中</div>
+    </div>
+    <div class="glass" style="padding:14px 16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:700;color:var(--text-1);">🔍 逐场复盘</div>
+        <span style="font-size:11px;color:var(--text-3);">绿=真实 · 蓝=赛前预测</span>
+      </div>
+      ${rows}
+    </div>
+  </div>`;
+}
+
 /* ============ 小组赛 ============ */
 function groupsHTML(){
   const groups = Object.keys(V.groups).sort();
@@ -676,7 +752,7 @@ function fmtDate(d){
 }
 
 /* 初始化 */
-document.getElementById('app').innerHTML = predictHTML() + groupsHTML() + knockoutHTML() + championHTML();
+document.getElementById('app').innerHTML = predictHTML() + accuracyHTML() + groupsHTML() + knockoutHTML() + championHTML();
 document.getElementById('tcount').textContent = V.team_count;
 document.getElementById('gcount').textContent = V.groups_count;
 document.getElementById('fincount').textContent = V.progress.finished;

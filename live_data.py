@@ -110,23 +110,39 @@ def _lookup_venue(g, t1, t2):
     return ""
 
 
+def _make_ssl_context():
+    """构造 SSL 上下文：优先用 certifi / 系统根证书做完整校验；
+    仅当本机确实没有可用根证书时（如未配置的 macOS 默认 Python）才降级，
+    避免对所有连接静默关闭证书验证。"""
+    import ssl
+    ctx = ssl.create_default_context()
+    # 1) 优先 certifi 提供的根证书
+    try:
+        import certifi
+        ctx.load_verify_locations(certifi.where())
+        return ctx
+    except Exception:
+        pass
+    # 2) 退回系统根证书
+    try:
+        ctx.load_default_certs()
+        if ctx.get_ca_certs():
+            return ctx
+    except Exception:
+        pass
+    # 3) 实在没有根证书：降级（不校验），仅作为最后兜底
+    print("[live_data] 警告：未找到可用根证书，本次请求将跳过 TLS 校验")
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 def _fetch_api():
     """实际 HTTP 请求；失败返回 None"""
     import ssl
     try:
-        # 兼容未配置根证书的环境（如 macOS 默认 Python）
-        try:
-            ctx = ssl.create_default_context()
-            ctx.load_default_certs()
-            ctx.verify_mode = ssl.CERT_REQUIRED
-            # 触发一次证书加载测试
-            ctx.get_ca_certs(binary_form=False)
-            if not ctx.get_ca_certs():
-                raise ssl.SSLError("no ca certs")
-        except Exception:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
+        ctx = _make_ssl_context()
         req = urllib.request.Request(API_URL, headers={
             "Accept": "application/json",
             "User-Agent": "wc2026-predictor/1.0",
