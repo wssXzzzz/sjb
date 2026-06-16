@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>2026 世界杯 · 比分预测</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<!-- 防闪烁：首帧前先定主题 -->
+<script>
+(function(){
+  try{
+    var m = localStorage.getItem('wc26-theme') || 'auto';
+    var dark = m === 'dark' || (m === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  }catch(e){}
+})();
+</script>
+<style>
+/* ===================== iOS 26 液态玻璃 设计令牌（世界杯版） ===================== */
+:root[data-theme="light"]{
+  --page-bg:#e7ecf3;
+  --ambient:linear-gradient(165deg,#eef3f7 0%,#e6ecf2 45%,#eef0f4 100%);
+  --blob-green:rgba(34,160,90,.30); --blob-gold:rgba(232,170,40,.32); --blob-blue:rgba(54,110,240,.32);
+  --glass-bg:linear-gradient(150deg,rgba(255,255,255,.66),rgba(255,255,255,.36));
+  --glass-bg-strong:linear-gradient(150deg,rgba(255,255,255,.70),rgba(255,255,255,.40));
+  --glass-border:rgba(255,255,255,.68); --glass-hi:rgba(255,255,255,.88);
+  --glass-shadow:0 18px 40px -14px rgba(36,52,84,.26); --glass-shadow-sm:0 14px 34px -16px rgba(36,52,84,.22);
+  --text-1:#14161e; --text-2:rgba(52,60,88,.62); --text-3:rgba(52,60,88,.46); --text-strong-2:#2a2e3c;
+  --hairline:rgba(110,128,168,.13); --chip:rgba(110,128,168,.12); --chip-2:rgba(110,128,168,.15);
+  --accent:#1f8a52; --accent-2:#e8a428; --accent-soft-bg:rgba(46,150,90,.16); --accent-gold-bg:rgba(232,164,40,.18);
+  --tab-bar-bg:linear-gradient(150deg,rgba(255,255,255,.74),rgba(255,255,255,.52)); --tab-bar-border:rgba(255,255,255,.72);
+  --tab-active-bg:linear-gradient(150deg,rgba(46,150,90,.24),rgba(46,150,90,.10));
+  --field-bg:rgba(255,255,255,.46);
+  --win:#1f8a52; --lose:#d24b3e; --draw:#caa236;
+  --qual:#1f8a52; --qual-bg:linear-gradient(150deg,rgba(46,170,90,.22),rgba(46,170,90,.08));
+  --third:#d98a24; --third-bg:linear-gradient(150deg,rgba(232,150,40,.20),rgba(232,150,40,.06));
+  --gold:#e8a428;
+}
+:root[data-theme="dark"]{
+  --page-bg:#080a10;
+  --ambient:linear-gradient(165deg,#0a0d14 0%,#080a10 50%,#0d0e16 100%);
+  --blob-green:rgba(40,180,100,.24); --blob-gold:rgba(232,170,40,.22); --blob-blue:rgba(60,120,255,.26);
+  --glass-bg:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,.034));
+  --glass-bg-strong:linear-gradient(150deg,rgba(255,255,255,.14),rgba(255,255,255,.055));
+  --glass-border:rgba(255,255,255,.15); --glass-hi:rgba(255,255,255,.20);
+  --glass-shadow:0 20px 46px -14px rgba(0,0,0,.66); --glass-shadow-sm:0 16px 38px -16px rgba(0,0,0,.56);
+  --text-1:#f3f5fb; --text-2:rgba(224,229,246,.66); --text-3:rgba(210,216,238,.46); --text-strong-2:#e9ecf6;
+  --hairline:rgba(255,255,255,.08); --chip:rgba(255,255,255,.07); --chip-2:rgba(255,255,255,.10);
+  --accent:#4ecb82; --accent-2:#f2c050; --accent-soft-bg:rgba(80,200,130,.20); --accent-gold-bg:rgba(240,200,80,.16);
+  --tab-bar-bg:linear-gradient(150deg,rgba(46,50,66,.74),rgba(30,33,46,.54)); --tab-bar-border:rgba(255,255,255,.16);
+  --tab-active-bg:linear-gradient(150deg,rgba(80,200,130,.30),rgba(80,200,130,.12));
+  --field-bg:rgba(255,255,255,.06);
+  --win:#4ecb82; --lose:#ff6f60; --draw:#e0c060;
+  --qual:#4ecb82; --qual-bg:linear-gradient(150deg,rgba(80,200,130,.24),rgba(80,200,130,.08));
+  --third:#f0b050; --third-bg:linear-gradient(150deg,rgba(240,180,70,.22),rgba(240,180,70,.06));
+  --gold:#f2c050;
+}
+*{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
+html,body{margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang SC","Helvetica Neue",system-ui,sans-serif;
+  background:var(--page-bg);color:var(--text-1);transition:background .4s ease;min-height:100vh;}
+@keyframes wcFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-18px)}}
+@keyframes wcRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes wcPop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+::-webkit-scrollbar{width:0;height:0;}
+
+/* 环境光背景 */
+.wc-bg{position:fixed;inset:0;overflow:hidden;background:var(--ambient);transition:background .45s ease;z-index:0;}
+.wc-bg b{position:absolute;border-radius:50%;display:block;}
+.wc-bg .g{top:-120px;left:-80px;width:380px;height:380px;background:radial-gradient(circle,var(--blob-green),transparent 70%);filter:blur(30px);animation:wcFloat 14s ease-in-out infinite;}
+.wc-bg .y{top:-60px;right:-90px;width:360px;height:360px;background:radial-gradient(circle,var(--blob-gold),transparent 70%);filter:blur(30px);animation:wcFloat 17s ease-in-out infinite reverse;}
+.wc-bg .b{bottom:-120px;left:30%;width:420px;height:420px;background:radial-gradient(circle,var(--blob-blue),transparent 70%);filter:blur(36px);animation:wcFloat 20s ease-in-out infinite;}
+
+.wrap{position:relative;z-index:1;max-width:520px;margin:0 auto;min-height:100vh;padding:0 16px 132px;}
+
+/* 玻璃卡片 */
+.glass{background:var(--glass-bg);backdrop-filter:blur(30px) saturate(170%);-webkit-backdrop-filter:blur(30px) saturate(170%);
+  border:1px solid var(--glass-border);box-shadow:var(--glass-shadow-sm),inset 0 1px 0 var(--glass-hi);border-radius:28px;}
+.glass-strong{background:var(--glass-bg-strong);backdrop-filter:blur(34px) saturate(180%);-webkit-backdrop-filter:blur(34px) saturate(180%);
+  border:1px solid var(--glass-border);box-shadow:var(--glass-shadow),inset 0 1px 0 var(--glass-hi);border-radius:30px;}
+
+/* 大标题 */
+.lt-eyebrow{font-size:13px;font-weight:600;letter-spacing:.4px;color:var(--text-3);margin-bottom:3px;}
+.lt-title{margin:0;font-size:36px;font-weight:800;letter-spacing:-.6px;color:var(--text-1);}
+.lt-sub{font-size:13.5px;color:var(--text-2);margin-top:5px;}
+
+/* 顶部主题分段控件 */
+.seg{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:22;width:calc(100% - 32px);max-width:520px;display:flex;justify-content:flex-end;padding-top:14px;pointer-events:none;}
+.seg-box{pointer-events:auto;display:flex;gap:2px;padding:4px;border-radius:21px;background:var(--tab-bar-bg);backdrop-filter:blur(34px) saturate(185%);-webkit-backdrop-filter:blur(34px) saturate(185%);border:1px solid var(--tab-bar-border);box-shadow:var(--glass-shadow-sm),inset 0 1px 0 var(--glass-hi);}
+.seg-btn{width:34px;height:30px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--text-3);border-radius:16px;cursor:pointer;transition:all .2s;}
+.seg-btn.on{background:var(--tab-active-bg);color:var(--accent);}
+
+/* 底部玻璃标签栏 */
+.tabbar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:20;width:calc(100% - 40px);max-width:480px;}
+.tabbar .inner{display:flex;align-items:stretch;gap:6px;padding:7px;border-radius:30px;background:var(--tab-bar-bg);backdrop-filter:blur(40px) saturate(190%);-webkit-backdrop-filter:blur(40px) saturate(190%);border:1px solid var(--tab-bar-border);box-shadow:var(--glass-shadow),inset 0 1px 0 var(--glass-hi);}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;flex:1;padding:8px 0 6px;border:none;background:transparent;cursor:pointer;font-size:10.5px;font-weight:600;color:var(--text-3);border-radius:23px;transition:all .25s;}
+.tab.on{color:var(--accent);font-weight:700;background:var(--tab-active-bg);box-shadow:inset 0 1px 0 var(--glass-hi);}
+.tab svg{width:20px;height:20px;}
+
+/* 视图切换 */
+.view{display:none;animation:wcRise .4s ease;}
+.view.on{display:block;}
+
+/* 比分胶囊 */
+.score-line{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;border-radius:18px;background:var(--chip);}
+.score-line+.score-line{margin-top:8px;}
+.team{display:flex;align-items:center;gap:8px;min-width:0;flex:1;}
+.team .flag{font-size:22px;line-height:1;}
+.team .nm{font-size:13.5px;font-weight:600;color:var(--text-strong-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.team.right{justify-content:flex-end;}
+.team.right .nm{text-align:right;}
+.sco{display:flex;align-items:center;gap:5px;flex:0 0 auto;}
+.sco .n{min-width:26px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--field-bg);font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--text-1);}
+.sco .dash{color:var(--text-3);font-weight:500;}
+.win-team .nm{color:var(--accent);font-weight:700;}
+
+/* 已踢(绿)/未踢(蓝) 视觉区分 */
+.score-line.finished{background:var(--qual-bg);border:1px solid rgba(46,170,90,.30);}
+.score-line.finished .n{background:rgba(46,170,90,.20);color:var(--qual);}
+.score-line.predicted{background:rgba(54,110,240,.10);border:1px solid rgba(54,110,240,.22);}
+.score-line.predicted .n{background:rgba(54,110,240,.16);color:#2a6fd6;}
+:root[data-theme="dark"] .score-line.predicted .n{color:#7aa6ff;}
+.status-tag{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;letter-spacing:.2px;}
+.status-tag.finished{background:rgba(46,170,90,.20);color:var(--qual);}
+.status-tag.predicted{background:rgba(54,110,240,.18);color:#2a6fd6;}
+:root[data-theme="dark"] .status-tag.predicted{color:#8db4ff;}
+
+/* 进度条 */
+.progress-bar{height:6px;border-radius:6px;background:var(--chip);overflow:hidden;margin:8px 0 2px;}
+.progress-bar .fill{height:100%;background:linear-gradient(90deg,#2aa066,#4ecb82);border-radius:6px;transition:width .6s ease;}
+.progress-meta{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-3);margin-bottom:2px;}
+
+/* 下一场预测大卡 */
+.next-card{padding:18px 18px 16px;margin-bottom:14px;border:1px solid rgba(54,110,240,.28);}
+.kickoff-banner{display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 12px;border-radius:14px;background:linear-gradient(150deg,rgba(46,150,90,.16),rgba(46,150,90,.06));margin-bottom:14px;}
+.kickoff-banner .ko-cal{font-size:17px;}
+.kickoff-banner .ko-when{font-size:15px;font-weight:800;color:var(--qual);letter-spacing:.2px;font-variant-numeric:tabular-nums;}
+.kickoff-banner .ko-tz{font-size:9.5px;font-weight:700;color:var(--text-3);background:var(--chip);padding:2px 6px;border-radius:6px;}
+.next-eyebrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.next-vs{display:flex;align-items:center;justify-content:space-around;gap:6px;}
+.next-side{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;}
+.next-side .flag{font-size:40px;}
+.next-side .nm{font-size:13px;font-weight:700;color:var(--text-strong-2);}
+.next-mid{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.next-mid .sc{font-size:22px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;}
+.next-mid .vs{font-size:11px;color:var(--text-3);font-weight:600;}
+.next-mid .pred{font-size:9px;font-weight:700;color:#2a6fd6;background:rgba(54,110,240,.14);padding:2px 7px;border-radius:7px;}
+.next-bar{height:7px;border-radius:7px;overflow:hidden;display:flex;margin:12px 0 5px;background:var(--chip);}
+.next-bar .h{background:linear-gradient(90deg,#2a6fd6,#4a8ef0);}
+.next-bar .a{background:linear-gradient(90deg,#e8826a,#d24b3e);}
+.next-bar-labels{display:flex;justify-content:space-between;font-size:10.5px;font-weight:600;}
+.next-bar-labels .hl{color:#2a6fd6;}
+.next-bar-labels .al{color:#d24b3e;}
+.next-info{display:flex;justify-content:center;gap:10px;font-size:10.5px;color:var(--text-3);margin-top:8px;}
+.next-info .pill{background:var(--chip-2);padding:3px 9px;border-radius:10px;font-weight:600;}
+
+/* 近期赛程预测列表 */
+.up-day{margin-bottom:10px;}
+.up-day:last-child{margin-bottom:0;}
+.up-day-h{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:5px;letter-spacing:.2px;}
+.up-row{display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:13px;background:rgba(54,110,240,.08);margin-bottom:5px;font-size:11.5px;}
+.up-row:last-child{margin-bottom:0;}
+.up-row .up-tm{font-weight:700;color:var(--text-2);min-width:34px;font-variant-numeric:tabular-nums;}
+.up-row .up-grp{font-size:9.5px;font-weight:600;color:var(--text-3);background:var(--chip);padding:2px 6px;border-radius:7px;min-width:26px;text-align:center;}
+.up-row .up-teams,.up-row .up-teams2{display:flex;align-items:center;gap:4px;color:var(--text-strong-2);font-weight:600;}
+.up-row .up-teams{flex:1;}
+.up-row .up-teams2{flex:1;justify-content:flex-end;}
+.up-row .up-sc{font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;min-width:30px;text-align:center;font-size:13px;}
+.up-row .up-win{font-size:10px;color:var(--text-3);min-width:62px;text-align:right;}
+.up-row .flag{font-size:15px;}
+
+/* 预测理由盒 */
+.rsn-box{margin-top:14px;padding:12px 14px;border-radius:16px;background:rgba(54,110,240,.08);border:1px solid rgba(54,110,240,.18);}
+.rsn-big{background:rgba(54,110,240,.10);}
+.rsn-h{font-size:11.5px;font-weight:700;color:#2a6fd6;margin-bottom:7px;letter-spacing:.2px;}
+:root[data-theme="dark"] .rsn-h{color:#7aa6ff;}
+.rsn-pt{font-size:11.5px;color:var(--text-strong-2);line-height:1.7;padding-left:2px;}
+.rsn-sum{font-size:12px;color:var(--text-1);font-weight:600;margin-top:8px;padding-top:8px;border-top:1px solid var(--hairline);line-height:1.5;}
+
+/* 可展开的近期赛程卡 */
+.up-card{border-radius:14px;background:rgba(54,110,240,.06);margin-bottom:6px;overflow:hidden;}
+.up-head{display:flex;align-items:center;gap:6px;padding:9px 11px;cursor:pointer;font-size:11.5px;}
+.up-head:active{opacity:.7;}
+.up-card .up-reasons{max-height:0;overflow:hidden;transition:max-height .3s ease;padding:0 11px;}
+.up-card.open .up-reasons{max-height:300px;padding:4px 11px 11px;border-top:1px solid rgba(54,110,240,.14);}
+.up-card.open .up-toggle{transform:rotate(180deg);}
+.up-toggle{font-size:10px;color:var(--text-3);transition:transform .25s;}
+.up-fav{font-size:10px;font-weight:700;min-width:62px;text-align:right;}
+
+/* 夺冠页阶段名单 */
+.stage-row{display:flex;flex-wrap:wrap;gap:6px;}
+.stage-chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:6px 11px;border-radius:13px;}
+.stage-chip .flag{font-size:16px;}
+.stage-chip .chip-rk{font-size:9.5px;font-weight:600;opacity:.7;margin-left:2px;}
+.stage-chip.hot{background:linear-gradient(150deg,#2aa066,#1d7a4a);color:#fff;}
+.stage-chip.warm{background:linear-gradient(150deg,#3aa8c8,#2a82c0);color:#fff;}
+.stage-chip.mild{background:linear-gradient(150deg,#e8b44a,#d99a28);color:#5a3f00;}
+.stage-chip.cool{background:var(--chip);color:var(--text-strong-2);}
+
+/* 赛事信息条 */
+.minfo{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--text-3);padding:0 4px 8px;}
+.minfo .pill{background:var(--chip-2);padding:3px 9px;border-radius:10px;font-weight:600;}
+
+/* 小组卡 */
+.gp-card{padding:16px;margin-bottom:14px;}
+.gp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.gp-tag{display:flex;align-items:center;gap:8px;}
+.gp-badge{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,#2aa066,#1d7a4a);box-shadow:0 4px 10px rgba(42,160,100,.35);}
+.gp-name{font-size:15px;font-weight:700;color:var(--text-1);}
+.gp-title{font-size:11px;color:var(--text-3);}
+.gp-body{display:grid;grid-template-columns:1fr;gap:14px;}
+.gp-section-label{font-size:11px;font-weight:600;color:var(--text-3);letter-spacing:.3px;text-transform:uppercase;margin-bottom:2px;}
+
+/* 积分榜 */
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{text-align:center;font-weight:600;color:var(--text-3);font-size:10px;padding:6px 4px;border-bottom:1px solid var(--hairline);}
+.tbl th.l{text-align:left;padding-left:8px;}
+.tbl td{text-align:center;padding:8px 4px;color:var(--text-strong-2);font-variant-numeric:tabular-nums;border-bottom:1px solid var(--hairline);}
+.tbl td.l{text-align:left;padding-left:8px;}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl .tn{display:flex;align-items:center;gap:7px;font-weight:600;color:var(--text-1);}
+.tbl .tn .flag{font-size:16px;}
+.pts-badge{display:inline-flex;align-items:center;justify-content:center;font-weight:800;color:var(--text-1);}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:2px;vertical-align:middle;}
+.dot.q{background:var(--qual);box-shadow:0 0 0 2px var(--qual-bg);}
+.dot.t{background:var(--third);}
+
+/* 淘汰赛签表 */
+.ko-round-label{font-size:13px;font-weight:700;color:var(--accent);margin:18px 4px 10px;letter-spacing:.3px;}
+.ko-match{padding:10px 12px;margin-bottom:8px;border-radius:18px;background:var(--glass-bg);border:1px solid var(--glass-border);position:relative;}
+.ko-match.champ{border-color:var(--gold);background:var(--accent-gold-bg);box-shadow:0 8px 22px -8px rgba(232,164,40,.4);}
+.ko-match .ko-side{display:flex;align-items:center;justify-content:space-between;padding:4px 0;}
+.ko-match .ko-side+.ko-side{border-top:1px solid var(--hairline);}
+.ko-side .kt{display:flex;align-items:center;gap:7px;font-size:13px;}
+.ko-side .kt .flag{font-size:18px;}
+.ko-side .kt .nm{font-weight:600;color:var(--text-strong-2);}
+.ko-side.win .nm{color:var(--accent);font-weight:700;}
+.ko-side.lose .nm{color:var(--text-3);}
+.ko-side .g{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--text-1);}
+.ko-side.lose .g{color:var(--text-3);}
+.ko-date{font-size:9.5px;color:var(--text-3);text-align:center;margin-bottom:5px;}
+
+/* 冠军大卡 */
+.champ-card{padding:24px 20px;margin-bottom:16px;overflow:hidden;position:relative;}
+.champ-eyebrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.champ-eyebrow .lbl{display:flex;align-items:center;gap:8px;}
+.champ-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,#ffd86b,#e8a428);box-shadow:0 5px 14px rgba(232,164,40,.5);color:#fff;font-size:16px;}
+.champ-title{font-size:18px;font-weight:800;color:var(--text-1);}
+.champ-trophy{font-size:54px;text-align:center;margin:6px 0 2px;animation:wcPop .6s ease;}
+.champ-flag{font-size:62px;text-align:center;line-height:1;}
+.champ-name{text-align:center;font-size:30px;font-weight:800;color:var(--text-1);margin-top:6px;letter-spacing:-.5px;}
+.champ-meta{text-align:center;font-size:12.5px;color:var(--text-3);margin-top:6px;}
+.champ-path{margin-top:16px;}
+.path-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:14px;background:var(--chip);margin-bottom:6px;}
+.path-row .rnd{font-size:10.5px;color:var(--text-3);min-width:62px;font-weight:600;}
+.path-row .opp{display:flex;align-items:center;gap:6px;flex:1;font-size:12.5px;color:var(--text-strong-2);font-weight:600;}
+.path-row .opp .flag{font-size:15px;}
+.path-row .sc{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--accent);}
+
+/* 概率图 */
+.prob-chart{height:340px;width:100%;}
+.heat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.hcell{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:11px 6px;border-radius:16px;line-height:1.15;}
+.hcell .flag{font-size:22px;}
+.hcell .nm{font-size:11px;font-weight:700;margin-top:4px;}
+.hcell .pct{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;}
+.hcell.hot{background:linear-gradient(150deg,#2aa066,#1d7a4a);color:#fff;box-shadow:0 4px 12px -3px rgba(42,160,100,.5);}
+.hcell.warm{background:linear-gradient(150deg,#3aa8c8,#2a82c0);color:#fff;box-shadow:0 4px 12px -3px rgba(50,140,200,.45);}
+.hcell.mild{background:linear-gradient(150deg,#e8b44a,#d99a28);color:#5a3f00;}
+.hcell.cool{background:var(--chip);color:var(--text-2);}
+
+/* 公用 */
+.foot{text-align:center;font-size:11px;color:var(--text-3);padding:14px 0 4px;line-height:1.6;}
+.btn-soft{border:none;background:var(--accent-soft-bg);color:var(--accent);font-size:12px;font-weight:600;padding:6px 13px;border-radius:20px;cursor:pointer;text-decoration:none;display:inline-block;}
+.section-card{padding:16px;margin-bottom:14px;}
+.card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.card-h .ct{font-size:15px;font-weight:700;color:var(--text-1);display:flex;align-items:center;gap:7px;}
+.card-h .ct .ic{font-size:16px;}
+.legend{display:flex;gap:12px;font-size:10.5px;color:var(--text-3);align-items:center;}
+.empty{text-align:center;padding:30px 16px;color:var(--text-3);font-size:13px;}
+</style>
+</head>
+<body>
+<div class="wc-bg"><b class="g"></b><b class="y"></b><b class="b"></b></div>
+
+<!-- 主题切换 -->
+<div class="seg"><div class="seg-box">
+  <button class="seg-btn" data-mode="light" onclick="setTheme('light')" title="浅色">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M21.5 12h-2M4.5 12h-2M18.4 5.6l-1.4 1.4M7 17l-1.4 1.4M18.4 18.4 17 17M7 7 5.6 5.6"/></svg>
+  </button>
+  <button class="seg-btn" data-mode="auto" onclick="setTheme('auto')" title="跟随系统">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 010 16.8z" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button class="seg-btn" data-mode="dark" onclick="setTheme('dark')" title="深色">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20.5 14.8A8.2 8.2 0 1 1 9.2 3.6 6.6 6.6 0 0 0 20.5 14.8z"/></svg>
+  </button>
+</div></div>
+
+<div class="wrap">
+  <!-- 大标题 -->
+  <div style="padding:64px 4px 14px;">
+    <div class="lt-eyebrow">实时混合预测 · 真实赛果 + 动态实力</div>
+    <h1 class="lt-title">2026 世界杯</h1>
+    <div class="lt-sub">美加墨 · <span id="tcount">48</span> 队 · <span id="gcount">12</span> 组 · 已完赛 <span id="fincount">0</span>/<span id="totcount">0</span> 场</div>
+  </div>
+  <!-- 进度条 -->
+  <div class="glass" style="padding:12px 16px;margin-bottom:14px;">
+    <div class="progress-meta"><span>📊 赛事进度</span><span id="progPct">0%</span></div>
+    <div class="progress-bar"><div class="fill" id="progFill" style="width:0%"></div></div>
+    <div class="progress-meta" style="margin-top:4px;"><span id="liveStatus">同步中…</span><span id="liveUpdated"></span></div>
+  </div>
+  <div id="app"></div>
+
+  <div class="foot">
+    实时数据 · OpenLigaDB · 已踢用真实赛果，未踢用动态实力模型预测<br>
+    基于 FIFA 排名 + 实时表现 Elo · 蒙特卡洛 1000 次 · 仅供预测娱乐
+  </div>
+</div>
+
+<!-- 底部标签栏 -->
+<div class="tabbar"><div class="inner">
+  <button class="tab on" data-view="predict" onclick="switchView('predict')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l1.6 4.9h5.1l-4.1 3 1.6 4.9-4.2-3-4.2 3 1.6-4.9-4.1-3h5.1z"/></svg>
+    预测
+  </button>
+  <button class="tab" data-view="groups" onclick="switchView('groups')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="2.6"/><circle cx="17" cy="7" r="2.6"/><circle cx="7" cy="17" r="2.6"/><circle cx="17" cy="17" r="2.6"/></svg>
+    小组赛
+  </button>
+  <button class="tab" data-view="knockout" onclick="switchView('knockout')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 21V8a3 3 0 013-3h2M19 21V8a3 3 0 00-3-3h-2M9 5v4a3 3 0 003 3 3 3 0 003-3V5M12 12v9"/></svg>
+    淘汰赛
+  </button>
+  <button class="tab" data-view="champion" onclick="switchView('champion')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 9H4.5a1.5 1.5 0 010-3H6m12 3h1.5a1.5 1.5 0 000-3H18M6 6h12v4a6 6 0 01-12 0V6zm3 13h6M9 19l-1 2m7-2l1 2M9 11l1.5 1.5L9 14m6-3l-1.5 1.5L15 14"/></svg>
+    夺冠
+  </button>
+</div></div>
+
+<script>
+const V = {{ view | safe }};
+
+function setTheme(m){
+  localStorage.setItem('wc26-theme', m);
+  const dark = m==='dark' || (m==='auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', dark?'dark':'light');
+  document.querySelectorAll('.seg-btn').forEach(b=>b.classList.toggle('on', b.dataset.mode===m));
+  if(window._chart){ renderProbChart(); }
+}
+(function(){const m=localStorage.getItem('wc26-theme')||'auto';document.querySelectorAll('.seg-btn').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));})();
+
+function switchView(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view===name));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on', v.id==='view-'+name));
+  if(name==='champion' && !window._chart) setTimeout(renderProbChart, 50);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ============ 预测首页 ============ */
+function predictHTML(){
+  const upcoming = V.upcoming || [];
+  if(!upcoming.length){
+    return `<div class="view on" id="view-predict"><div class="empty">所有比赛已完赛 🎉</div></div>`;
+  }
+  // 第一场做大卡（突出展示 + 完整理由）
+  const first = upcoming[0];
+  const rest = upcoming.slice(1);
+  const fhp = first.home_win, fap = first.away_win;
+  const fr = first.reasons;
+  // 第一场理由要点
+  const fPoints = fr.points.map(p=>`<div class="rsn-pt">• ${p}</div>`).join('');
+  const bigCard = `
+    <div class="glass next-card">
+      <div class="next-eyebrow">
+        <div style="font-size:13px;font-weight:700;color:var(--text-1);">🔮 下一场预测</div>
+        <span class="status-tag predicted">未踢 · 预测</span>
+      </div>
+      <div class="kickoff-banner">
+        <span class="ko-cal">⚽</span>
+        <span class="ko-when">${fmtDate(first.date)} · 开球 ${first.time}</span>
+        <span class="ko-tz">UTC</span>
+      </div>
+      <div class="next-vs">
+        <div class="next-side"><span class="flag">${first.home_flag}</span><span class="nm">${first.home_zh}</span></div>
+        <div class="next-mid">
+          <span class="sc">${first.hg} - ${first.ag}</span>
+          <span class="vs">vs</span>
+          <span class="pred">预测比分</span>
+        </div>
+        <div class="next-side"><span class="flag">${first.away_flag}</span><span class="nm">${first.away_zh}</span></div>
+      </div>
+      <div class="next-bar"><div class="h" style="width:${fhp}%"></div><div class="a" style="width:${fap}%"></div></div>
+      <div class="next-bar-labels"><span class="hl">${first.home_zh} ${fhp}%</span><span class="al">${first.away_zh} ${fap}%</span></div>
+      <div class="rsn-box rsn-big">
+        <div class="rsn-h">📝 预测理由</div>
+        ${fPoints}
+        <div class="rsn-sum">${fr.summary}</div>
+      </div>
+      <div class="next-info"><span class="pill">${first.group}组 · 第${first.md}轮</span><span class="pill">📍 ${first.venue}</span></div>
+    </div>`;
+
+  // 其余场次按日期分组，每场可展开理由
+  const byDate = {};
+  rest.forEach(m=>{ (byDate[m.date] = byDate[m.date]||[]).push(m); });
+  const restHTML = Object.keys(byDate).map(date=>{
+    const rows = byDate[date].map((m,idx)=>{
+      const hp = m.home_win, ap = m.away_win;
+      const r = m.reasons;
+      const favColor = hp>ap ? 'var(--accent)' : '#d24b3e';
+      const favName = hp>ap ? m.home_zh : m.away_zh;
+      const pts = r.points.map(p=>`<div class="rsn-pt">• ${p}</div>`).join('');
+      return `<div class="up-card">
+        <div class="up-head" onclick="this.parentElement.classList.toggle('open')">
+          <span class="up-tm">${m.time}</span>
+          <span class="up-grp">${m.group}组</span>
+          <span class="up-teams"><span class="flag">${m.home_flag}</span>${m.home_zh}</span>
+          <span class="up-sc">${m.hg}-${m.ag}</span>
+          <span class="up-teams2">${m.away_zh}<span class="flag">${m.away_flag}</span></span>
+          <span class="up-fav" style="color:${favColor}">${favName} ${Math.max(hp,ap)}%</span>
+          <span class="up-toggle">▾</span>
+        </div>
+        <div class="up-reasons">
+          ${pts}
+          <div class="rsn-sum">${r.summary}</div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="up-day"><div class="up-day-h">📅 ${fmtDate(date)}</div>${rows}</div>`;
+  }).join('');
+
+  return `
+  <div class="view on" id="view-predict">
+    ${bigCard}
+    <div class="glass" style="padding:14px 16px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:700;color:var(--text-1);">📋 近期赛程预测</div>
+        <span style="font-size:11px;color:var(--text-3);">共 ${upcoming.length} 场未踢 · 点击展开理由</span>
+      </div>
+      ${restHTML}
+    </div>
+  </div>`;
+}
+
+/* ============ 夺冠预测页 ============ */
+function champFinalScore(){
+  const f = V.knockout.find(m=>m.round==='F');
+  if(!f) return '';
+  return `${f.home.zh} ${f.hg}-${f.ag} ${f.away.zh}`;
+}
+function stageChip(team, maxRank){
+  // 实力越强色块越热
+  const cls = team.rank<=4?'hot':(team.rank<=10?'warm':(team.rank<=25?'mild':'cool'));
+  return `<span class="stage-chip ${cls}"><span class="flag">${team.flag}</span>${team.zh}<span class="chip-rk">#${team.rank}</span></span>`;
+}
+function championHTML(){
+  const c = V.champion, ru = V.runner_up;
+  let path = V.champion_path.map(p=>`
+    <div class="path-row">
+      <span class="rnd">${p.round_zh}</span>
+      <span class="opp"><span class="flag">${p.opp_flag}</span>${p.opp_zh}</span>
+      <span class="sc">${p.cg} - ${p.og}</span>
+    </div>`).join('');
+  const thirds = V.qualified_thirds.map(t=>`<span style="display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;color:var(--text-strong-2);background:var(--third-bg);padding:5px 10px;border-radius:14px;margin:3px;"><span style="font-size:15px">${t.flag}</span>${t.zh}</span>`).join('');
+  // 各阶段名单
+  const r16 = V.round16.map(t=>stageChip(t)).join('');
+  const r8 = V.round8.map(t=>stageChip(t)).join('');
+  const r4 = V.round4.map(t=>stageChip(t)).join('');
+  // 概率热力
+  const top = V.probs.slice(0,12);
+  const heat = top.map((p,i)=>{
+    const cls = i<3?'hot':(i<6?'warm':(i<9?'mild':'cool'));
+    return `<div class="hcell ${cls}"><div class="flag">${p.flag}</div><div class="nm">${p.zh}</div><div class="pct">${p.title}%</div></div>`;
+  }).join('');
+  // 概率表
+  let list = V.probs.map(p=>`
+    <tr>
+      <td class="l"><div class="tn"><span class="flag">${p.flag}</span><span>${p.zh}</span></div></td>
+      <td style="color:var(--accent);font-weight:700">${p.r16}%</td>
+      <td>${p.sf}%</td><td>${p.final}%</td>
+      <td style="color:var(--accent-2);font-weight:800">${p.title}%</td>
+    </tr>`).join('');
+
+  return `
+  <div class="view" id="view-champion">
+    <div style="font-size:11px;color:var(--text-3);padding:2px 4px 8px;">⚠️ 远期预测，越往后不确定性越大，仅供参考</div>
+    <!-- 冠军卡 -->
+    <div class="glass-strong champ-card">
+      <div class="champ-eyebrow">
+        <div class="lbl"><span class="champ-icon">🏆</span><span class="champ-title">预测冠军</span></div>
+        <span style="font-size:11px;font-weight:600;color:var(--text-3);font-variant-numeric:tabular-nums">FIFA 排名 #${c.rank}</span>
+      </div>
+      <div class="champ-trophy">🏆</div>
+      <div class="champ-flag">${c.flag}</div>
+      <div class="champ-name">${c.zh}</div>
+      <div class="champ-meta">实力分 ${c.elo} · 决赛 ${champFinalScore()}</div>
+      <div class="champ-path">
+        <div style="font-size:11px;font-weight:600;color:var(--text-3);margin-bottom:6px;letter-spacing:.3px;">🥇 晋级之路</div>
+        ${path}
+      </div>
+    </div>
+
+    <!-- 亚军 -->
+    <div class="glass" style="padding:16px;margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text-3);font-weight:600;">🥈 预测亚军</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+        <span style="font-size:28px;">${ru.flag}</span>
+        <span style="font-size:20px;font-weight:800;color:var(--text-1);">${ru.zh}</span>
+        <span style="font-size:12px;color:var(--text-3);margin-left:auto;">FIFA #${ru.rank} · 实力 ${ru.elo}</span>
+      </div>
+    </div>
+
+    <!-- 4强 -->
+    <div class="glass section-card">
+      <div class="card-h"><div class="ct"><span class="ic">🥉</span>预测四强</div></div>
+      <div class="stage-row">${r4}</div>
+    </div>
+    <!-- 8强 -->
+    <div class="glass section-card">
+      <div class="card-h"><div class="ct"><span class="ic">8️⃣</span>预测八强</div></div>
+      <div class="stage-row">${r8}</div>
+    </div>
+    <!-- 16强 -->
+    <div class="glass section-card">
+      <div class="card-h"><div class="ct"><span class="ic">🔢</span>预测十六强</div></div>
+      <div class="stage-row">${r16}</div>
+    </div>
+
+    <!-- 最佳第三名 -->
+    <div class="glass section-card">
+      <div class="card-h"><div class="ct"><span class="ic">⚖️</span>晋级最佳第三名</div></div>
+      <div style="display:flex;flex-wrap:wrap;gap:2px;">${thirds}</div>
+    </div>
+
+    <!-- 夺冠热力 -->
+    <div class="glass section-card">
+      <div class="card-h"><div class="ct"><span class="ic">🔥</span>夺冠概率 Top 12</div></div>
+      <div class="heat">${heat}</div>
+    </div>
+    <!-- ECharts -->
+    <div class="glass section-card">
+      <div class="card-h"><div class="ct"><span class="ic">📊</span>各阶段晋级率</div></div>
+      <div id="probChart" class="prob-chart"></div>
+    </div>
+    <!-- 完整概率表 -->
+    <div class="glass section-card">
+      <div class="card-h"><div class="ct"><span class="ic">📋</span>完整概率表</div></div>
+      <table class="tbl">
+        <thead><tr><th class="l">球队</th><th>16强</th><th>4强</th><th>决赛</th><th>夺冠</th></tr></thead>
+        <tbody>${list}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+/* ============ 小组赛 ============ */
+function groupsHTML(){
+  const groups = Object.keys(V.groups).sort();
+  let html = '<div class="view" id="view-groups">';
+  html += `<div class="glass" style="padding:12px 16px;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-2);">
+      <span class="dot q"></span>直接晋级(前2)　<span class="dot t"></span>小组第三·争最佳
+    </div></div>`;
+  for(const g of groups){
+    const data = V.groups[g];
+    const matches = data.matches;
+    let rows = data.table.map((r,i)=>{
+      const cls = r.qualified?'q':(r.is_third?'t':'');
+      const qMark = r.qualified?'<span class="dot q"></span>':(r.third_qualified?'<span class="dot t"></span>':(r.is_third?'<span class="dot" style="background:var(--text-3);opacity:.3"></span>':''));
+      return `<tr>
+        <td class="l"><div class="tn">${qMark}<span class="flag">${r.flag}</span><span style="${r.qualified?'color:var(--accent);font-weight:700':''}">${r.zh}</span></div></td>
+        <td>${r.w}</td><td>${r.d}</td><td>${r.l}</td>
+        <td>${r.gf>0?'+':''}${r.gd}</td>
+        <td><span class="pts-badge">${r.pts}</span></td>
+      </tr>`;
+    }).join('');
+    // 比赛
+    let mhtml = matches.map(m=>{
+      const hw = m.hg>m.ag, aw = m.ag>m.hg;
+      const cls = m.status==='finished'?'finished':'predicted';
+      const tag = m.status==='finished' ? '<span class="status-tag finished">✓ 已完赛</span>' : '<span class="status-tag predicted">🔮 预测</span>';
+      return `<div class="score-line ${cls}">
+        <div class="team ${hw?'win-team':''}"><span class="flag">${m.home_flag}</span><span class="nm">${m.home_zh}</span></div>
+        <div class="sco"><span class="n">${m.hg}</span><span class="dash">-</span><span class="n">${m.ag}</span></div>
+        <div class="team right ${aw?'win-team':''}"><span class="nm">${m.away_zh}</span><span class="flag">${m.away_flag}</span></div>
+      </div>`;
+    }).join('');
+    // 已踢/未踢计数
+    const finCnt = matches.filter(m=>m.status==='finished').length;
+    html += `
+    <div class="glass gp-card">
+      <div class="gp-head">
+        <div class="gp-tag"><div class="gp-badge">${g}</div><div><div class="gp-name">第 ${g} 组</div><div class="gp-title">Group ${g}</div></div></div>
+        <div style="font-size:11px;color:var(--text-3);">${finCnt} 已踢 / ${matches.length} 场</div>
+      </div>
+      <div class="gp-body">
+        <div>
+          <div class="gp-section-label">🏁 比赛结果 <span style="font-weight:400;color:var(--text-3);">（绿=真实 · 蓝=预测）</span></div>
+          ${mhtml}
+        </div>
+        <div>
+          <div class="gp-section-label">📊 最终积分榜</div>
+          <table class="tbl">
+            <thead><tr><th class="l">球队</th><th>胜</th><th>平</th><th>负</th><th>净胜</th><th>分</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ============ 淘汰赛 ============ */
+function knockoutHTML(){
+  const rounds = [
+    {k:'R32', zh:'三十二强赛 · Round of 32'},
+    {k:'R16', zh:'十六强赛 · Round of 16'},
+    {k:'QF',  zh:'四分之一决赛 · Quarter-finals'},
+    {k:'SF',  zh:'半决赛 · Semi-finals'},
+    {k:'F',   zh:'决赛 · Final'},
+  ];
+  let html = '<div class="view" id="view-knockout">';
+  for(const r of rounds){
+    const ms = V.knockout.filter(m=>m.round===r.k);
+    if(!ms.length) continue;
+    html += `<div class="ko-round-label">${r.zh}</div>`;
+    for(const m of ms){
+      const isChamp = m.round==='F';
+      const hw = m.hg>m.ag, aw = m.ag>m.hg;
+      const penNote = m.pen ? `<span style="font-size:10px;color:var(--text-3);">(点球 ${m.pen})</span>` : '';
+      html += `<div class="ko-match ${isChamp&&m.winner.name===V.champion.name?'champ':''}">
+        <div class="ko-date">${m.round_zh} · ${fmtDate(m.date)}</div>
+        <div class="ko-side ${hw?'win':'lose'}">
+          <div class="kt"><span class="flag">${m.home.flag}</span><span class="nm">${m.home.zh}</span></div>
+          <span class="g">${m.hg}</span>
+        </div>
+        <div class="ko-side ${aw?'win':'lose'}">
+          <div class="kt"><span class="flag">${m.away.flag}</span><span class="nm">${m.away.zh}</span></div>
+          <span class="g">${m.ag}</span>
+        </div>
+        ${penNote}
+      </div>`;
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ============ 概率图（夺冠页内嵌）============ */
+function renderProbChart(){
+  const el = document.getElementById('probChart');
+  if(!el) return;
+  const top = V.probs.slice(0,10).reverse();
+  const chart = echarts.init(el, null, {renderer:'canvas'});
+  window._chart = chart;
+  const dark = document.documentElement.getAttribute('data-theme')==='dark';
+  chart.setOption({
+    grid:{left:90,right:24,top:10,bottom:24},
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:dark?'rgba(20,24,34,.92)':'rgba(255,255,255,.95)',borderColor:dark?'rgba(255,255,255,.12)':'rgba(0,0,0,.08)',textStyle:{color:dark?'#eee':'#222'}},
+    legend:{data:['16强','4强','决赛','夺冠'],textStyle:{color:dark?'#cdd4e6':'#555'},top:0,itemWidth:10,itemHeight:10},
+    xAxis:{type:'value',max:100,axisLabel:{color:dark?'#8a93a8':'#888',formatter:'{value}%'},splitLine:{lineStyle:{color:dark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)'}}},
+    yAxis:{type:'category',data:top.map(p=>p.flag+' '+p.zh),axisLabel:{color:dark?'#dfe4f0':'#333',fontSize:11}},
+    series:[
+      {name:'16强',type:'bar',stack:'a',data:top.map(p=>p.r16),itemStyle:{color:dark?'#3a7a5a':'#9fd9bc'},barWidth:'60%'},
+      {name:'4强',type:'bar',stack:'a',data:top.map(p=>p.sf),itemStyle:{color:dark?'#3a82a8':'#a3cfdf'}},
+      {name:'决赛',type:'bar',stack:'a',data:top.map(p=>p.final),itemStyle:{color:dark?'#9a7ac0':'#cdb8e6'}},
+      {name:'夺冠',type:'bar',stack:'a',data:top.map(p=>p.title),itemStyle:{color:dark?'#4ecb82':'#1f8a52'}},
+    ]
+  });
+}
+
+function fmtDate(d){
+  const dt = new Date(d);
+  return `${dt.getMonth()+1}月${dt.getDate()}日`;
+}
+
+/* 初始化 */
+document.getElementById('app').innerHTML = predictHTML() + groupsHTML() + knockoutHTML() + championHTML();
+document.getElementById('tcount').textContent = V.team_count;
+document.getElementById('gcount').textContent = V.groups_count;
+document.getElementById('fincount').textContent = V.progress.finished;
+document.getElementById('totcount').textContent = V.progress.total;
+document.getElementById('progPct').textContent = V.progress.percent + '%';
+document.getElementById('progFill').style.width = V.progress.percent + '%';
+const ls = document.getElementById('liveStatus');
+if(ls){
+  ls.textContent = V.live.online ? '🟢 实时数据已同步' : '🟡 离线模式 · 纯预测';
+  ls.style.color = V.live.online ? 'var(--qual)' : 'var(--third)';
+}
+const lu = document.getElementById('liveUpdated');
+if(lu) lu.textContent = V.live.last_updated ? ('更新于 ' + V.live.last_updated) : '';
+</script>
+</body>
+</html>
