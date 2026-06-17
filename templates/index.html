@@ -329,9 +329,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
   .tab{flex:0 0 auto;flex-direction:row;gap:7px;padding:9px 18px;font-size:12.5px;border-radius:20px;}
   .tab svg{width:17px;height:17px;}
   .seg{max-width:1080px;}
-  /* 预测首页：大卡 + 赛程 两列 */
+  /* 预测首页：大卡 + 赛程 两列；大卡较矮 → 吸顶，跟随右侧长列表滚动，消除留白 */
   .predict-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;align-items:start;}
   .predict-grid .next-card,.predict-grid .predict-sched{margin-bottom:0;}
+  .predict-grid .next-card{position:sticky;top:84px;}
   /* 小组赛两列 */
   .gp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
   .gp-grid .gp-card{margin-bottom:0;}
@@ -342,10 +343,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
   /* 复盘两列 */
   .acc-list{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
   .acc-list .acc-row{margin-bottom:0;}
-  /* 淘汰赛：每轮一列，横向对阵树 */
-  .ko-bracket{flex-direction:row;align-items:stretch;gap:14px;overflow-x:auto;padding-bottom:8px;}
-  .ko-col{flex:1 1 0;min-width:200px;display:flex;flex-direction:column;justify-content:center;}
+  /* 淘汰赛：每轮一列，横向对阵树 + 连接线 */
+  .ko-bracket{flex-direction:row;align-items:stretch;gap:26px;overflow-x:auto;padding-bottom:8px;}
+  .ko-col{flex:1 1 0;min-width:200px;display:flex;flex-direction:column;justify-content:flex-start;}
   .ko-col .ko-round-label{margin:0 0 10px;text-align:center;}
+  .ko-col-body{flex:1;display:flex;flex-direction:column;justify-content:space-around;}
+  .ko-pair{flex:1;display:flex;flex-direction:column;justify-content:space-around;position:relative;}
+  .ko-pair .ko-match{margin-bottom:0;}
+  /* 每场右侧伸出短横线（最后一轮=决赛不需要）*/
+  .ko-col:not(:last-child) .ko-match{position:relative;}
+  .ko-col:not(:last-child) .ko-match::after{content:'';position:absolute;left:100%;top:50%;width:13px;height:2px;background:var(--text-3);}
+  /* 一对的竖线（连接对内两场）+ 竖线中点伸向下一轮的横线 */
+  .ko-col:not(:last-child) .ko-pair::after{content:'';position:absolute;left:calc(100% + 13px);top:25%;height:50%;width:2px;background:var(--text-3);}
+  .ko-col:not(:last-child) .ko-pair::before{content:'';position:absolute;left:calc(100% + 13px);top:50%;width:13px;height:2px;background:var(--text-3);z-index:1;}
+  /* 下一轮每场左侧伸出短横线，与上一轮汇合于间隙 */
+  .ko-col:not(:first-child) .ko-match::before{content:'';position:absolute;right:100%;top:50%;width:13px;height:2px;background:var(--text-3);}
 }
 @media (min-width:1280px){
   .gp-grid{grid-template-columns:repeat(3,1fr);}
@@ -766,6 +778,25 @@ function groupsHTML(){
   return html;
 }
 
+/* 单场淘汰赛卡片 */
+function koMatchCard(m){
+  const isChamp = m.round==='F';
+  const hw = m.hg>m.ag, aw = m.ag>m.hg;
+  const penNote = m.pen ? `<span style="font-size:10px;color:var(--text-3);">(点球 ${m.pen})</span>` : '';
+  return `<div class="ko-match ${isChamp&&m.winner.name===V.champion.name?'champ':''}">
+    <div class="ko-date">${m.round_zh} · ${fmtDate(m.date)}</div>
+    <div class="ko-side ${hw?'win':'lose'}">
+      <div class="kt"><span class="flag">${m.home.flag}</span><span class="nm">${m.home.zh}</span></div>
+      <span class="g">${m.hg}</span>
+    </div>
+    <div class="ko-side ${aw?'win':'lose'}">
+      <div class="kt"><span class="flag">${m.away.flag}</span><span class="nm">${m.away.zh}</span></div>
+      <span class="g">${m.ag}</span>
+    </div>
+    ${penNote}
+  </div>`;
+}
+
 /* ============ 淘汰赛 ============ */
 function knockoutHTML(){
   const rounds = [
@@ -775,30 +806,21 @@ function knockoutHTML(){
     {k:'SF',  zh:'半决赛 · Semi-finals'},
     {k:'F',   zh:'决赛 · Final'},
   ];
-  // 每轮一列：移动端纵向堆叠(≈原竖排)，桌面端横向并排 = 对阵树
+  // 每轮一列：移动端纵向堆叠(≈原竖排)，桌面端横向并排 = 对阵树。
+  // 相邻两场打包成 .ko-pair（胜者进同一下轮），桌面端用 CSS 画连接线。
   let cols = '';
   for(const r of rounds){
     const ms = V.knockout.filter(m=>m.round===r.k);
     if(!ms.length) continue;
-    let cards = '';
-    for(const m of ms){
-      const isChamp = m.round==='F';
-      const hw = m.hg>m.ag, aw = m.ag>m.hg;
-      const penNote = m.pen ? `<span style="font-size:10px;color:var(--text-3);">(点球 ${m.pen})</span>` : '';
-      cards += `<div class="ko-match ${isChamp&&m.winner.name===V.champion.name?'champ':''}">
-        <div class="ko-date">${m.round_zh} · ${fmtDate(m.date)}</div>
-        <div class="ko-side ${hw?'win':'lose'}">
-          <div class="kt"><span class="flag">${m.home.flag}</span><span class="nm">${m.home.zh}</span></div>
-          <span class="g">${m.hg}</span>
-        </div>
-        <div class="ko-side ${aw?'win':'lose'}">
-          <div class="kt"><span class="flag">${m.away.flag}</span><span class="nm">${m.away.zh}</span></div>
-          <span class="g">${m.ag}</span>
-        </div>
-        ${penNote}
-      </div>`;
+    let body = '';
+    if(ms.length > 1){
+      for(let i=0;i<ms.length;i+=2){
+        body += `<div class="ko-pair">${koMatchCard(ms[i])}${ms[i+1]?koMatchCard(ms[i+1]):''}</div>`;
+      }
+    } else {
+      body = `<div class="ko-pair single">${koMatchCard(ms[0])}</div>`;
     }
-    cols += `<div class="ko-col"><div class="ko-round-label">${r.zh}</div>${cards}</div>`;
+    cols += `<div class="ko-col"><div class="ko-round-label">${r.zh}</div><div class="ko-col-body">${body}</div></div>`;
   }
   return `<div class="view" id="view-knockout"><div class="ko-bracket">${cols}</div></div>`;
 }
