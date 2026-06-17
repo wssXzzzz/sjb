@@ -24,14 +24,20 @@ _elo_cache = {}
 # 阵容质量进 base_elo（静态先验）；历史交锋进 win_prob（对局修正）
 _SQUADS = None   # {team: {avg_age, top5_pct, avg_caps,...}} from squad_data
 _FORM = None     # {team: {games, wr,...}} from form_data
+_ODDS = None     # {frozenset(home,away): {pH,pD,pA,books_n}} from odds_data
 
 
-def set_dimensions(squads=None, form=None):
+def set_dimensions(squads=None, form=None, odds=None):
     """注入多维度数据；变更后必须清 Elo 缓存以重算。"""
-    global _SQUADS, _FORM
+    global _SQUADS, _FORM, _ODDS
     _SQUADS = squads
     _FORM = form
+    _ODDS = odds
     _elo_cache.clear()
+
+
+# 赔率融合权重（ODDS_PLAN.md §3.2）：对市场隐含概率的信任度，0.7=赔率主导但保留模型
+ODDS_W = 0.7
 
 
 # ---------------------------------------------------------------------------
@@ -161,14 +167,105 @@ def _likely_scoreline(ea, total, max_goals=8):
     return best
 
 
-def predicted_scoreline(home, away, played_per_team=None):
-    """最可能比分（整数）：取双方泊松联合分布的众数比分。
+def _poisson_grid(ea, total, max_goals=8):
+    """双方独立泊松的联合网格概率。返回 (ph_list, pa_list, lam_h, lam_a)。"""
+    lam_h = max(0.15, total * ea)
+    lam_a = max(0.15, total * (1 - ea))
+    ph = [_poisson_pmf(i, lam_h) for i in range(max_goals + 1)]
+    pa = [_poisson_pmf(j, lam_a) for j in range(max_goals + 1)]
+    return ph, pa, lam_h, lam_a
+
+
+def model_1x2(home, away, played_per_team=None, total=2.7):
+    """模型的胜/平/负概率（ODDS_PLAN.md §3.1）：复用泊松联合网格按区域求和。
+    返回 (mH, mD, mA)，sum≈1。"""
+    ea = win_prob(home, away, played_per_team)
+    ph, pa, _, _ = _poisson_grid(ea, total)
+    n = len(ph)
+    mH = sum(ph[i] * pa[j] for i in range(n) for j in range(n) if i > j)
+    mD = sum(ph[i] * pa[i] for i in range(n))
+    mA = max(0.0, 1.0 - mH - mD)
+    return (mH, mD, mA)
+
+
+def _odds_for(home, away):
+    """查注入赔率的隐含 1X2（延迟导入避免循环依赖）；无返回 None"""
+    if not _ODDS:
+        return None
+    try:
+        import odds_data as OD
+        return OD.odds_for(home, away, _ODDS)
+    except Exception:
+        return None
+
+
+def blend_1x2(home, away, played_per_team=None, total=2.7):
+    """模型 1X2 与市场赔率 1X2 融合（ODDS_PLAN.md §3.2）。
+    有赔率(books_n>=1) → λ=ODDS_W 线性组合；否则回退纯模型。
+    返回 (pH, pD, pA)，sum≈1。"""
+    m = model_1x2(home, away, played_per_team, total)
+    ov = _odds_for(home, away)
+    if ov and ov.get("books_n", 0) >= 1:
+        # 模型与市场方向一致 → 标准 0.7 权重；方向相反 → 提升到 0.85（更信市场）
+        m_fav = max(range(3), key=lambda k: m[k])
+        o_fav = max(range(3), key=lambda k: (ov["pH"], ov["pD"], ov["pA"])[k])
+        l = ODDS_W if m_fav == o_fav else min(0.85, ODDS_W + 0.15)
+        pH = (1 - l) * m[0] + l * ov["pH"]
+        pD = (1 - l) * m[1] + l * ov["pD"]
+        pA = (1 - l) * m[2] + l * ov["pA"]
+        # 归一（线性组合后可能略偏 1）
+        s = pH + pD + pA
+        return (pH / s, pD / s, pA / s)
+    return m
+
+
+def _scoreline_from_1x2(p1x2, total=2.7):
+    """由 1X2 概率定最可能比分（ODDS_PLAN.md §3.3）。
+    方向 = argmax(pH,pD,pA)；平局 → 联合网格里 i==j 的众数(通常 1-1)；
+    主胜/客胜 → 该方向区域(i>j / i<j)的众数比分。"""
+    pH, pD, pA = p1x2
+    # 用 p1x2 反推一个等价的 ea 来生成网格（使网格的 1X2 近似匹配 p1x2）
+    ea = pH / (pH + pA) if (pH + pA) > 0 else 0.5
+    ph, pa, _, _ = _poisson_grid(ea, total)
+    n = len(ph)
+    direction = max(range(3), key=lambda k: p1x2[k])  # 0=主胜 1=平 2=客胜
+    if direction == 1:  # 平局 → i==j 众数
+        best_p, best = -1.0, (1, 1)
+        for i in range(n):
+            p = ph[i] * pa[i]
+            if p > best_p:
+                best_p, best = p, (i, i)
+        return best
+    elif direction == 0:  # 主胜 → i>j 众数
+        best_p, best = -1.0, (1, 0)
+        for i in range(n):
+            for j in range(i):
+                p = ph[i] * pa[j]
+                if p > best_p:
+                    best_p, best = p, (i, j)
+        return best
+    else:  # 客胜 → i<j 众数
+        best_p, best = -1.0, (0, 1)
+        for j in range(n):
+            for i in range(j):
+                p = ph[i] * pa[j]
+                if p > best_p:
+                    best_p, best = p, (i, j)
+        return best
+
+
+def predicted_scoreline(home, away, played_per_team=None, use_odds=True):
+    """最可能比分（整数）：模型 1X2（+赔率融合）的方向 → 该方向众数比分。
     - played_per_team=None（默认）：仅用赛前基础 Elo。复盘准确率用此口径，
       刻意不看赛事内结果 → 无信息泄漏。
-    - 传入 played_per_team：用动态 Elo（含已踢真实表现），用于首页未踢比赛展示。
+    - use_odds=True（默认）：融合市场赔率（首页未踢比赛展示用）；
+      use_odds=False：纯模型，复盘准确率用此口径（ODDS_PLAN.md §5，防口径污染）。
     返回 (home_goals, away_goals)。"""
-    ea = win_prob(home, away, played_per_team)
-    return _likely_scoreline(ea, total=2.7)   # 2.7：小组赛场均总进球，与 play_match 一致
+    if use_odds:
+        b = blend_1x2(home, away, played_per_team, total=2.7)
+    else:
+        b = model_1x2(home, away, played_per_team, total=2.7)
+    return _scoreline_from_1x2(b, total=2.7)   # 2.7：小组赛场均总进球
 
 
 def sample_goals(rng, lam):
@@ -193,10 +290,12 @@ def play_match(rng, home, away, ko=False, played_per_team=None, deterministic=Fa
     # 场均进球：小组赛略高，淘汰赛更保守
     total = 2.2 if ko else 2.7
     if deterministic:
-        # 最可能比分（众数），与 predicted_scoreline 同口径
-        ga, gb = _likely_scoreline(ea, total)
+        # 最可能比分（众数），与 predicted_scoreline 同口径（融合赔率）
+        # ODDS_PLAN.md §3.3：首页/小组赛同场比分一致
+        b = blend_1x2(home, away, played_per_team, total)
+        ga, gb = _scoreline_from_1x2(b, total)
     else:
-        # 按 Elo 期望瓜分总进球后泊松随机采样
+        # 按 Elo 期望瓜分总进球后泊松随机采样（蒙特卡洛）
         lam_a = max(0.15, total * ea)
         lam_b = max(0.15, total * (1 - ea))
         ga, gb = sample_goals(rng, lam_a), sample_goals(rng, lam_b)
@@ -204,8 +303,8 @@ def play_match(rng, home, away, ko=False, played_per_team=None, deterministic=Fa
     pen_winner = None
     if ko and ga == gb:
         if deterministic:
-            # 确定性：实力较强一方晋级（不引入随机加时/点球）
-            pen_winner = home if ea >= 0.5 else away
+            # 确定性：按融合 1X2 的 pH>=pA 判晋级方（与方向一致）
+            pen_winner = home if b[0] >= b[2] else away
         else:
             # 加时赛：再各加 30 分钟强度的泊松
             ot_total = 0.8

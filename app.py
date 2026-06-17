@@ -11,6 +11,7 @@ import live_data as LD
 import reasons as R
 import squad_data as SD
 import form_data as FD
+import odds_data as OD
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -31,10 +32,11 @@ def build_view():
     live = LD.fetch_matches()
     played_per_team = (LD.played_games_per_team(live)
                        if live.get("source") == "online" else None)
-    # 多维度数据：阵容质量（Wikipedia）+ 近期战绩（OpenLigaDB 大赛）
+    # 多维度数据：阵容质量（Wikipedia）+ 近期战绩（OpenLigaDB 大赛）+ 赔率（The Odds API）
     squads = SD.fetch_squads()
     form = FD.fetch_form()
-    P.set_dimensions(squads=squads, form=form)   # 注入预测器（模块级）
+    odds = OD.fetch_odds()
+    P.set_dimensions(squads=squads, form=form, odds=odds)   # 注入预测器（模块级）
     sim = P.get_prediction(live)
     probs = P.get_probs(live, n=1000)
 
@@ -121,7 +123,7 @@ def build_view():
     } for r in path]
 
     # ---- 近期未踢比赛预测列表（总览页高亮）----
-    upcoming = _build_upcoming(sim, live, played_per_team, squads=squads, form=form)
+    upcoming = _build_upcoming(sim, live, played_per_team, squads=squads, form=form, odds=odds)
 
     # ---- 进行中/待数据：已开球但数据源未出分 ----
     live_now = _build_live_now(sim)
@@ -181,7 +183,7 @@ def build_view():
     }
 
 
-def _build_upcoming(sim, live, played_per_team, squads=None, form=None, limit=16):
+def _build_upcoming(sim, live, played_per_team, squads=None, form=None, odds=None, limit=16):
     """总览页高亮：所有未踢比赛的预测，按时间排序。
     返回 list，每场含预测比分+胜率+多维度理由。按日期分组返回便于 UI 展示。"""
     # 只保留"尚未开赛"的预测场：已过开球时间的（即便数据源还没标记完赛）不再算下一场
@@ -198,7 +200,7 @@ def _build_upcoming(sim, live, played_per_team, squads=None, form=None, limit=16
         wp = P.win_prob(h, a, played_per_team)
         # 直接用 sim 里的比分（确定性=最可能比分），保证与小组赛页同场一致
         reasons = R.generate_reasons(h, a, played_per_team, m["hg"], m["ag"],
-                                      squads=squads, form=form)
+                                      squads=squads, form=form, odds=odds)
         items.append({
             "group": m["group"], "md": m["md"],
             "home": h, "away": a,
@@ -245,7 +247,7 @@ def _build_accuracy(live):
             continue
         t1, t2 = m["team1"], m["team2"]
         rhg, rag = m["hg"], m["ag"]
-        phg, pag = P.predicted_scoreline(t1, t2)
+        phg, pag = P.predicted_scoreline(t1, t2, use_odds=False)
         real_sign = (rhg > rag) - (rhg < rag)
         pred_sign = (phg > pag) - (phg < pag)
         o_ok = (real_sign == pred_sign)

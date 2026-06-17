@@ -108,7 +108,30 @@ def _h2h_point(home, away, form):
     return f"交锋：{hzh} vs {azh} 近{n}次相遇，{verdict}"
 
 
-def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None, form=None):
+def _odds_point(fav, opp, home, away, odds):
+    """市场赔率要点：隐含胜平负 + 模型与市场一致/分歧标注（ODDS_PLAN.md §4）。"""
+    try:
+        import odds_data as OD
+    except Exception:
+        return None
+    ov = OD.odds_for(home, away, odds)
+    if not ov:
+        return None
+    fav_is_home = (fav == home)
+    fav_pct = round(100 * (ov["pH"] if fav_is_home else ov["pA"]))
+    try:
+        import predictor as P
+        b = P.blend_1x2(home, away)
+        model_fav_pct = round(100 * (b[0] if fav_is_home else b[2]))
+    except Exception:
+        model_fav_pct = None
+    diff = abs(fav_pct - model_fav_pct) if model_fav_pct is not None else 0
+    note = f"（市场与模型分歧{diff}%）" if diff > 20 else "（市场与模型基本一致）"
+    return (f"赔率：市场隐含 主胜{ov['pH']*100:.0f}% / 平{ov['pD']*100:.0f}% / "
+            f"客胜{ov['pA']*100:.0f}%（{ov.get('books_n',0)}家均值）{note}")
+
+
+def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None, form=None, odds=None):
     """生成一场比赛的预测理由。
     返回 {favorite, points:[...], summary}
     所有数据来自 predictor.py 的真实计算，不编造。
@@ -118,10 +141,19 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None,
     h_elo = round(P.elo_of(home, played_per_team))
     a_elo = round(P.elo_of(away, played_per_team))
     elo_diff = h_elo - a_elo
-    wp = P.win_prob(home, away, played_per_team)
-    fav = home if wp >= 0.5 else away
+    # 看好方用融合 1X2 判断（与 predicted_scoreline 口径一致，避免方向矛盾）
+    b1x2 = None
+    try:
+        b1x2 = P.blend_1x2(home, away)
+    except Exception:
+        pass
+    if b1x2:
+        fav = home if b1x2[0] >= b1x2[2] else away
+    else:
+        wp = P.win_prob(home, away, played_per_team)
+        fav = home if wp >= 0.5 else away
     fav_zh = _team_zh(fav)
-    fav_pct = round(100 * max(wp, 1 - wp))
+    fav_pct = round(100 * max(b1x2[0], b1x2[2])) if b1x2 else round(100 * max(wp, 1 - wp))
     opp_pct = 100 - fav_pct
     opp = away if fav == home else home
     opp_zh = _team_zh(opp)
@@ -134,10 +166,31 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None,
     rank_diff = abs(h_rank - a_rank)
     points.append(f"FIFA排名：{fav_zh}第{min(h_rank,a_rank)}位 vs {opp_zh}第{max(h_rank,a_rank)}位")
 
-    # ---- 要点2：实力推导（Elo→胜率因果链，含阵容修正）----
-    points.append(f"实力分：{fav_zh} {max(h_elo,a_elo)} vs {opp_zh} {min(h_elo,a_elo)}（差{abs(elo_diff)}→胜率{fav_pct}%）")
+    # ---- 要点2：实力推导（Elo→胜率因果链，含阵容修正；胜率用融合值）----
+    # 融合 1X2（含赔率）的方向和胜率，保证与预测比分口径一致
+    b1x2 = None
+    try:
+        b1x2 = P.blend_1x2(home, away)
+    except Exception:
+        pass
+    if b1x2:
+        # 看好方可能是 home 或 away
+        fav_is_home = (fav == home)
+        blend_fav_pct = round(100 * (b1x2[0] if fav_is_home else b1x2[2]))
+        points.append(f"实力分：{fav_zh} {max(h_elo,a_elo)} vs {opp_zh} {min(h_elo,a_elo)}（差{abs(elo_diff)}）→ 融合胜率{blend_fav_pct}%")
+        # 更新 fav_pct 为融合值（供总评用）
+        fav_pct = blend_fav_pct
+        opp_pct = 100 - fav_pct
+    else:
+        points.append(f"实力分：{fav_zh} {max(h_elo,a_elo)} vs {opp_zh} {min(h_elo,a_elo)}（差{abs(elo_diff)}→胜率{fav_pct}%）")
 
-    # ---- 要点3：阵容质量（五大联赛占比/年龄/国脚底蕴）----
+    # ---- 要点3：市场赔率（隐含概率，强信号）----
+    if odds:
+        odds_pt = _odds_point(fav, opp, home, away, odds)
+        if odds_pt:
+            points.append(odds_pt)
+
+    # ---- 要点4：阵容质量（五大联赛占比/年龄/国脚底蕴）----
     if squads:
         squad_pt = _squad_point(fav, opp, squads)
         if squad_pt:
@@ -177,21 +230,22 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None,
     if situ:
         points.append(" · ".join(situ))
 
-    # ---- 总评（综合实力差距给出一句结论）----
-    gap = _gap_level(rank_diff)
+    # ---- 总评（基于融合胜率 fav_pct 给出结论）----
     is_draw = (pred_hg == pred_ag)
     score_str = f"{pred_hg}-{pred_ag}"
     if is_draw:
-        if abs(elo_diff) < 120:
-            summary = f"两队实力接近，预测 {score_str} 平局合理，胜负看临场。"
+        if fav_pct < 45:
+            summary = f"两队势均力敌，预测 {score_str} 平局合理，胜负看临场。"
         else:
-            summary = f"虽 {fav_zh}{gap}（胜率{fav_pct}%），但本场预测 {score_str} 平局，或有冷门空间。"
-    elif abs(elo_diff) < 80:
-        summary = f"两队{_gap_level(1)}，胜负五五开，预测 {score_str}，不排除平局甚至冷门。"
-    elif abs(elo_diff) < 200:
-        summary = f"{fav_zh}{gap}，但并非铁板一块，预测 {score_str} 小胜可期。"
+            summary = f"虽 {fav_zh} 略占优(胜率{fav_pct}%)，但本场预测 {score_str} 平局，或有冷门空间。"
+    elif fav_pct < 45:
+        summary = f"两队势均力敌，预测 {fav_zh} {score_str} 小胜，但随时可能翻盘。"
+    elif fav_pct < 60:
+        summary = f"{fav_zh} 略占优(胜率{fav_pct}%)，预测 {score_str}，但并非稳赢。"
+    elif fav_pct < 75:
+        summary = f"{fav_zh} 明显占优(胜率{fav_pct}%)，预测 {score_str} 可期。"
     else:
-        summary = f"{fav_zh}{gap}（胜率{fav_pct}%），预测 {score_str} 合理拿下。"
+        summary = f"{fav_zh} 实力碾压(胜率{fav_pct}%)，预测 {score_str} 合理拿下。"
 
     return {"favorite": fav_zh, "favorite_pct": fav_pct, "opponent_pct": opp_pct,
             "points": points, "summary": summary}
