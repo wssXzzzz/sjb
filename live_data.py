@@ -40,6 +40,11 @@ def _parse_utc(iso):
     return dt
 
 
+def _now_beijing():
+    """当前北京时间 'YYYY-MM-DD HH:MM'（不依赖服务器本地时区）"""
+    return datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M")
+
+
 def to_beijing(utc_iso):
     """UTC ISO 字符串 → (date 'YYYY-MM-DD', time 'HH:MM') 北京时间；失败返回 (None, None)"""
     dt = _parse_utc(utc_iso)
@@ -101,7 +106,7 @@ def fetch_matches(force=False):
     if raw is None:
         # 降级：返回空（调用方据此走纯预测）
         result = {
-            "matches": [], "last_updated": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
+            "matches": [], "last_updated": _now_beijing(),
             "finished_count": 0, "total": 0, "source": "offline",
         }
         _cache.update({"data": result, "ts": now, "source": "offline"})
@@ -134,7 +139,7 @@ def fetch_matches(force=False):
     finished_count = sum(1 for m in matches if m["finished"])
     result = {
         "matches": matches,
-        "last_updated": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
+        "last_updated": _now_beijing(),
         "finished_count": finished_count,
         "total": len(matches),
         "source": "online",

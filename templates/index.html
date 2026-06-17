@@ -367,7 +367,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 </div></div>
 
 <script>
-const V = {{ view | safe }};
+let V = {{ view | safe }};
+let curView = 'predict';   // 当前激活的 Tab，自动刷新重渲后用它恢复
 
 function setTheme(m){
   localStorage.setItem('wc26-theme', m);
@@ -378,10 +379,14 @@ function setTheme(m){
 }
 (function(){const m=localStorage.getItem('wc26-theme')||'auto';document.querySelectorAll('.seg-btn').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));})();
 
-function switchView(name){
+function applyView(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view===name));
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on', v.id==='view-'+name));
-  if(name==='champion' && !window._chart) setTimeout(renderProbChart, 50);
+  if(name==='champion') setTimeout(renderProbChart, 50);
+}
+function switchView(name){
+  curView = name;
+  applyView(name);
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -726,7 +731,8 @@ function knockoutHTML(){
 /* ============ 概率图（夺冠页内嵌）============ */
 function renderProbChart(){
   const el = document.getElementById('probChart');
-  if(!el) return;
+  if(!el || !el.clientWidth) return;            // 隐藏(宽度0)时不画，切到夺冠页再画
+  echarts.dispose(el);                           // 重渲后复用同一节点前先清掉旧实例
   const top = V.probs.slice(0,10).reverse();
   const chart = echarts.init(el, null, {renderer:'canvas'});
   window._chart = chart;
@@ -751,21 +757,41 @@ function fmtDate(d){
   return `${dt.getMonth()+1}月${dt.getDate()}日`;
 }
 
-/* 初始化 */
-document.getElementById('app').innerHTML = predictHTML() + accuracyHTML() + groupsHTML() + knockoutHTML() + championHTML();
-document.getElementById('tcount').textContent = V.team_count;
-document.getElementById('gcount').textContent = V.groups_count;
-document.getElementById('fincount').textContent = V.progress.finished;
-document.getElementById('totcount').textContent = V.progress.total;
-document.getElementById('progPct').textContent = V.progress.percent + '%';
-document.getElementById('progFill').style.width = V.progress.percent + '%';
-const ls = document.getElementById('liveStatus');
-if(ls){
-  ls.textContent = V.live.online ? '🟢 实时数据已同步' : '🟡 离线模式 · 纯预测';
-  ls.style.color = V.live.online ? 'var(--qual)' : 'var(--third)';
+/* ============ 渲染（首屏 + 自动刷新复用）============ */
+function render(){
+  document.getElementById('app').innerHTML = predictHTML() + accuracyHTML() + groupsHTML() + knockoutHTML() + championHTML();
+  document.getElementById('tcount').textContent = V.team_count;
+  document.getElementById('gcount').textContent = V.groups_count;
+  document.getElementById('fincount').textContent = V.progress.finished;
+  document.getElementById('totcount').textContent = V.progress.total;
+  document.getElementById('progPct').textContent = V.progress.percent + '%';
+  document.getElementById('progFill').style.width = V.progress.percent + '%';
+  const ls = document.getElementById('liveStatus');
+  if(ls){
+    ls.textContent = V.live.online ? '🟢 实时数据已同步' : '🟡 离线模式 · 纯预测';
+    ls.style.color = V.live.online ? 'var(--qual)' : 'var(--third)';
+  }
+  const lu = document.getElementById('liveUpdated');
+  if(lu) lu.textContent = V.live.last_updated ? ('更新于 ' + V.live.last_updated + ' 北京') : '';
+  applyView(curView);   // 重渲后恢复当前 Tab（含夺冠页图表）
 }
-const lu = document.getElementById('liveUpdated');
-if(lu) lu.textContent = V.live.last_updated ? ('更新于 ' + V.live.last_updated) : '';
+
+/* ============ 自动刷新：每 90s 拉一次 /api/data，有变化才重渲 ============ */
+async function poll(){
+  try{
+    const r = await fetch('/api/data', {cache:'no-store'});
+    if(!r.ok) return;
+    const data = await r.json();
+    const changed = !V || !V.live ||
+      data.live.last_updated !== V.live.last_updated ||
+      data.progress.finished !== V.progress.finished;
+    if(changed){ V = data; render(); }
+  }catch(e){ /* 网络抖动忽略，下次再试 */ }
+}
+
+render();                       // 首屏
+setInterval(poll, 90000);       // 之后每 90 秒自动同步
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) poll(); });  // 切回页面立即刷新
 </script>
 </body>
 </html>
