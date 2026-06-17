@@ -136,6 +136,32 @@ DE_TO_EN = {
     "England": "England", "Kroatien": "Croatia", "Panama": "Panama", "Ghana": "Ghana",
 }
 
+# 非 WC 参赛队但出现在 em2024/CA2024/unl2024 的对手德名 → 英文显示名
+# （仅用于近期战绩/交锋展示，不参与赛事模拟）
+DE_TO_EN_OPP = {
+    # 欧洲杯 em2024 对手
+    "Albanien": "Albania", "Dänemark": "Denmark", "Georgien": "Georgia",
+    "Italien": "Italy", "Polen": "Poland", "Rumänien": "Romania",
+    "Serbien": "Serbia", "Slowakei": "Slovakia", "Slowenien": "Slovenia",
+    "Ukraine": "Ukraine", "Ungarn": "Hungary", "Nordmazedonien": "North Macedonia",
+    "Färöer": "Faroe Islands", "Finnland": "Finland", "Irland": "Ireland",
+    "Island": "Iceland", "Luxemburg": "Luxembourg", "Moldau": "Moldova",
+    "Montenegro": "Montenegro", "Norwegen": "Norway", "Wales": "Wales",
+    "Nordirland": "Northern Ireland", "Griechenland": "Greece",
+    "Bosnien und Herzegowina": "Bosnia and Herz.",  # 注意空格变体
+    "Israel": "Israel", "Kosovo": "Kosovo", "Armenien": "Armenia",
+    "Bulgarien": "Bulgaria", "Litauen": "Lithuania", "Lettland": "Latvia",
+    "Andorra": "Andorra", "Belarus": "Belarus", "Gibraltar": "Gibraltar",
+    "Kasachstan": "Kazakhstan", "Liechtenstein": "Liechtenstein",
+    "Malta": "Malta", "San Marino": "San Marino", "Zypern": "Cyprus",
+    "Aserbaidschan": "Azerbaijan", "Estland": "Estonia",
+    # 美洲杯 CA2024 对手
+    "Bolivien": "Bolivia", "Chile": "Chile", "Costa Rica": "Costa Rica",
+    "Jamaika": "Jamaica", "Peru": "Peru", "Venezuela": "Venezuela",
+    "Honduras": "Honduras", "Trinidad und Tobago": "Trinidad and Tobago",
+    "Nicaragua": "Nicaragua", "Guatemala": "Guatemala",
+}
+
 # ---------------------------------------------------------------------------
 # 小组赛赛程兜底表（API 不可达时使用）：72 场，按球队名显式配对
 # 配对顺序依据 OpenLigaDB 真实赛程（如 A 组首场 Mexico v South Africa）

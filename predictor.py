@@ -19,6 +19,40 @@ import wc_data as W
 # 动态 Elo 缓存：{team: (elo_value, played_key)}，played_key 用于失效判断
 _elo_cache = {}
 
+# ---------------------------------------------------------------------------
+# 多维度数据（build_view 启动时通过 set_dimensions 注入；None=未启用该维度）
+# 阵容质量进 base_elo（静态先验）；历史交锋进 win_prob（对局修正）
+_SQUADS = None   # {team: {avg_age, top5_pct, avg_caps,...}} from squad_data
+_FORM = None     # {team: {games, wr,...}} from form_data
+
+
+def set_dimensions(squads=None, form=None):
+    """注入多维度数据；变更后必须清 Elo 缓存以重算。"""
+    global _SQUADS, _FORM
+    _SQUADS = squads
+    _FORM = form
+    _elo_cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# 阵容质量 → Elo 修正权重（保守，避免喧宾夺主）
+SQUAD_W_TOP5 = 1.2     # 五大联赛占比每 +1% → +1.2 Elo（0→100% 即 0→120）
+SQUAD_W_AGE = 40       # 年龄曲线最大 ±40
+H2H_W = 0.10           # 历史交锋胜率偏离 0.5 的最大 ±0.10 胜率修正
+
+
+def _age_curve(avg_age):
+    """年龄曲线：25-29 黄金期加分，过老/过嫩扣分。范围约 [-1, +1]"""
+    if avg_age is None:
+        return 0
+    if 25 <= avg_age <= 29:
+        # 27 岁为峰值
+        return 1.0 - abs(avg_age - 27) / 4.0
+    if avg_age < 25:
+        return -(25 - avg_age) / 6.0   # 年轻欠经验
+    # >29 老化
+    return -(avg_age - 29) / 8.0
+
 
 # 基础实力标定：斜率不宜过陡，否则强弱差被放大、几乎场场一边倒、不出平局。
 # ×8 使强队仍明显占优(西班牙vs加纳≈95%)，但中上游对话回到合理区间(法国vs塞内加尔≈66%)，
@@ -29,11 +63,18 @@ HOST_BONUS = 60
 
 
 def base_elo(team):
-    """FIFA 排名位次 → 基础 Elo 分（rank1≈2042，rank86≈1362；东道主另加）"""
+    """FIFA 排名位次 → 基础 Elo 分（rank1≈2042，rank86≈1362；东道主另加）。
+    注入阵容数据后，叠加阵容质量修正（五大联赛占比 + 年龄曲线）。"""
     rank = W.TEAMS[team]["rank"]
     elo = ELO_BASE - rank * ELO_SLOPE
     if W.TEAMS[team].get("host"):
         elo += HOST_BONUS  # 东道主主场加成
+    # 阵容质量修正（球员实力的市场化代理）
+    if _SQUADS and team in _SQUADS:
+        s = _SQUADS[team]
+        if s.get("top5_pct") is not None:
+            elo += SQUAD_W_TOP5 * s["top5_pct"]
+        elo += SQUAD_W_AGE * _age_curve(s.get("avg_age"))
     return elo
 
 
@@ -75,9 +116,26 @@ def elo_of(team, played_per_team=None):
 
 
 def win_prob(a, b, played_per_team=None):
-    """A 队胜率期望 (0~1)"""
+    """A 队胜率期望 (0~1)。
+    基础由 Elo 决定；若注入了历史交锋数据且样本充足，做对局微调。"""
     ea = 1.0 / (1.0 + 10 ** ((elo_of(b, played_per_team) - elo_of(a, played_per_team)) / 400.0))
+    # 历史交锋对局修正（成对的，放这里而非 base_elo）
+    if _FORM:
+        h = _h2h_lookup(a, b, _FORM)
+        if h and h.get("sample_n", 0) >= 3:
+            # wr1 是 a 的历史胜率(平局计0.5)；偏离 0.5 的部分按权重修正
+            ea += H2H_W * (h["wr1"] / 100.0 - 0.5)
+            ea = max(0.05, min(0.95, ea))
     return ea
+
+
+def _h2h_lookup(a, b, form):
+    """查 a vs b 历史交锋（延迟导入避免循环依赖）"""
+    try:
+        import form_data as FD
+        return FD.h2h(a, b, form)
+    except Exception:
+        return None
 
 
 def _poisson_pmf(k, lam):

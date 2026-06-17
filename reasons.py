@@ -56,10 +56,63 @@ def _gap_level(rank_diff):
     return "实力碾压"
 
 
-def generate_reasons(home, away, played_per_team, pred_hg, pred_ag):
+def _squad_point(fav, opp, squads):
+    """阵容质量对比要点；数据缺失返回 None"""
+    fs, os_ = squads.get(fav), squads.get(opp)
+    if not fs or not os_:
+        return None
+    parts = []
+    if fs.get("top5_pct") is not None and os_.get("top5_pct") is not None:
+        parts.append(f"五大联赛球员 {fs['top5_pct']:.0f}% vs {os_['top5_pct']:.0f}%")
+    if fs.get("avg_age") and os_.get("avg_age"):
+        parts.append(f"平均年龄 {fs['avg_age']} vs {os_['avg_age']}岁")
+    if fs.get("avg_caps") is not None and os_.get("avg_caps") is not None:
+        parts.append(f"场均国脚出场 {fs['avg_caps']:.0f} vs {os_['avg_caps']:.0f}次")
+    if fs.get("top_scorer") and fs["top_scorer_goals"] > 0:
+        parts.append(f"头号射手 {fs['top_scorer']}({fs['top_scorer_goals']}球)")
+    if not parts:
+        return None
+    return f"阵容：{_team_zh(fav)} vs {_team_zh(opp)} — " + " · ".join(parts)
+
+
+def _form_point(fav, opp, form):
+    """近期战绩要点；样本不足如实标注，无数据返回 None"""
+    ff = form.get(fav)
+    if not ff or ff["sample_n"] == 0:
+        return None
+    n = ff["sample_n"]
+    comps = "/".join(ff["comps"]) if ff.get("comps") else "大赛"
+    if n < 3:
+        return f"近期：{_team_zh(fav)}大赛样本不足({n}场{comps})，仅供参考"
+    return (f"近期：{_team_zh(fav)}近{n}场{comps} {ff['w']}胜{ff['d']}平{ff['l']}负，"
+            f"场均进{ff['gf_avg']}失{ff['ga_avg']}")
+
+
+def _h2h_point(home, away, form):
+    """历史交锋要点；无交锋或样本不足返回 None（不编造）"""
+    try:
+        import form_data as FD
+        h = FD.h2h(home, away, form)
+    except Exception:
+        return None
+    if not h or h["sample_n"] < 2:
+        return None
+    n = h["sample_n"]
+    hzh, azh = _team_zh(home), _team_zh(away)
+    if h["w1"] > h["w2"]:
+        verdict = f"{hzh}占优({h['w1']}胜{h['d']}平{h['w2']}负)"
+    elif h["w2"] > h["w1"]:
+        verdict = f"{azh}占优({h['w2']}胜{h['d']}平{h['w1']}负)"
+    else:
+        verdict = f"势均力敌(各{h['w1']}胜{h['d']}平)"
+    return f"交锋：{hzh} vs {azh} 近{n}次相遇，{verdict}"
+
+
+def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None, form=None):
     """生成一场比赛的预测理由。
     返回 {favorite, points:[...], summary}
-    所有数据来自 predictor.py 的真实计算，不编造。"""
+    所有数据来自 predictor.py 的真实计算，不编造。
+    squads: 阵容数据 dict（来自 squad_data）；form: 近期战绩 dict（来自 form_data）"""
     h_meta = W.TEAMS[home]
     a_meta = W.TEAMS[away]
     h_elo = round(P.elo_of(home, played_per_team))
@@ -70,6 +123,8 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag):
     fav_zh = _team_zh(fav)
     fav_pct = round(100 * max(wp, 1 - wp))
     opp_pct = 100 - fav_pct
+    opp = away if fav == home else home
+    opp_zh = _team_zh(opp)
 
     points = []
     summary = ""
@@ -77,20 +132,37 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag):
     # ---- 要点1：FIFA 排名对比 ----
     h_rank, a_rank = h_meta["rank"], a_meta["rank"]
     rank_diff = abs(h_rank - a_rank)
-    opp_zh = _team_zh(away if fav == home else home)
     points.append(f"FIFA排名：{fav_zh}第{min(h_rank,a_rank)}位 vs {opp_zh}第{max(h_rank,a_rank)}位")
 
-    # ---- 要点2：实力推导（Elo→胜率因果链）----
-    points.append(f"实力分：{fav_zh} {max(h_elo,a_elo)} vs {_team_zh(away if fav==home else home)} {min(h_elo,a_elo)}（差{abs(elo_diff)}→胜率{fav_pct}%）")
+    # ---- 要点2：实力推导（Elo→胜率因果链，含阵容修正）----
+    points.append(f"实力分：{fav_zh} {max(h_elo,a_elo)} vs {opp_zh} {min(h_elo,a_elo)}（差{abs(elo_diff)}→胜率{fav_pct}%）")
 
-    # ---- 要点3：近期状态（有已踢数据时）----
+    # ---- 要点3：阵容质量（五大联赛占比/年龄/国脚底蕴）----
+    if squads:
+        squad_pt = _squad_point(fav, opp, squads)
+        if squad_pt:
+            points.append(squad_pt)
+
+    # ---- 要点4：近期战绩（大赛）----
+    if form:
+        form_pt = _form_point(fav, opp, form)
+        if form_pt:
+            points.append(form_pt)
+
+    # ---- 要点5：历史交锋 ----
+    if form:
+        h2h_pt = _h2h_point(home, away, form)
+        if h2h_pt:
+            points.append(h2h_pt)
+
+    # ---- 要点6：近期状态（有已踢世界杯数据时）----
     h_form = _form_text(home, played_per_team)
     a_form = _form_text(away, played_per_team)
     fav_form = h_form if fav == home else a_form
     if fav_form:
         points.append(f"近期状态：{fav_zh}{fav_form}")
 
-    # ---- 要点4：情境因素 ----
+    # ---- 要点7：情境因素 ----
     situ = []
     if h_meta.get("host") or a_meta.get("host"):
         host_team = home if h_meta.get("host") else away
