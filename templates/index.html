@@ -60,7 +60,7 @@ html,body{margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang SC","Helvetica Neue",system-ui,sans-serif;
   background:var(--page-bg);color:var(--text-1);transition:background .4s ease;min-height:100vh;}
 @keyframes wcFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-18px)}}
-@keyframes wcRise{from{opacity:0;transform:translateY(10px) scale(.99);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+@keyframes wcRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes wcPop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
 ::-webkit-scrollbar{width:0;height:0;}
 
@@ -97,7 +97,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 .tab.on{color:var(--accent);font-weight:700;background:transparent;}
 .tab svg{width:20px;height:20px;}
 /* 流动高亮指示器：跟随激活 Tab 弹性滑动 + 高光扫过 */
-.tab-ind{position:absolute;z-index:0;left:0;top:7px;width:0;height:0;border-radius:23px;background:var(--tab-active-bg);box-shadow:inset 0 1px 0 var(--glass-hi);backdrop-filter:blur(10px) saturate(160%);-webkit-backdrop-filter:blur(10px) saturate(160%);overflow:hidden;view-transition-name:wc-tabind;transition:transform .45s cubic-bezier(.32,.72,0,1),width .45s cubic-bezier(.32,.72,0,1),height .3s ease,top .3s ease;}
+.tab-ind{position:absolute;z-index:0;left:0;top:7px;width:0;height:0;border-radius:23px;background:var(--tab-active-bg);box-shadow:inset 0 1px 0 var(--glass-hi);overflow:hidden;view-transition-name:wc-tabind;transition:transform .4s cubic-bezier(.32,.72,0,1),width .4s cubic-bezier(.32,.72,0,1),height .3s ease,top .3s ease;}
 .tab-ind.init{transition:none;}
 .tab-ind::after{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.38) 50%,transparent 65%);opacity:0;}
 .tab-ind.moving::after{animation:tabSheen .5s ease;}
@@ -373,13 +373,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 /* 仅内容区参与过渡，固定外壳(背景/主题/标签栏)冻结，避免闪烁 */
 #app{view-transition-name:wc-content;}
 ::view-transition-old(root),::view-transition-new(root){animation:none;}
-::view-transition-group(wc-content){animation-duration:.5s;animation-timing-function:cubic-bezier(.32,.72,0,1);}
-::view-transition-old(wc-content){animation:glassOut .42s cubic-bezier(.32,.72,0,1) both;}
-::view-transition-new(wc-content){animation:glassIn .5s cubic-bezier(.32,.72,0,1) both;}
+/* 仅 opacity+transform（GPU 合成，避免 filter:blur 的逐帧重栅格化导致卡顿）*/
+::view-transition-group(wc-content){animation-duration:.3s;animation-timing-function:cubic-bezier(.32,.72,0,1);}
+::view-transition-old(wc-content){animation:glassOut .26s cubic-bezier(.32,.72,0,1) both;}
+::view-transition-new(wc-content){animation:glassIn .32s cubic-bezier(.32,.72,0,1) both;}
 /* 指示器作为独立组，由过渡自动平滑移动到新 Tab（不被外壳快照遮住）*/
-::view-transition-group(wc-tabind){animation-duration:.5s;animation-timing-function:cubic-bezier(.32,.72,0,1);}
-@keyframes glassOut{to{opacity:0;transform:scale(1.012);filter:blur(7px);}}
-@keyframes glassIn{from{opacity:0;transform:scale(.985);filter:blur(9px);}}
+::view-transition-group(wc-tabind){animation-duration:.32s;animation-timing-function:cubic-bezier(.32,.72,0,1);}
+@keyframes glassOut{to{opacity:0;transform:scale(1.01);}}
+@keyframes glassIn{from{opacity:0;transform:scale(.99);}}
+/* 支持 View Transitions 时，由过渡接管，关掉 .view 自身的进入动画，避免双重动画卡顿 */
+.has-vt .view{animation:none;}
 
 @media (prefers-reduced-motion: reduce){
   .view{animation:none;}
@@ -932,6 +935,7 @@ async function poll(){
   }catch(e){ /* 网络抖动忽略，下次再试 */ }
 }
 
+if(document.startViewTransition) document.documentElement.classList.add('has-vt');  // 由过渡接管进入动画
 render();                       // 首屏（applyView 已首次定位指示器，带 .init 禁过渡）
 requestAnimationFrame(()=>{ const i=document.querySelector('.tab-ind'); if(i) i.classList.remove('init'); });  // 解锁滑动过渡
 window.addEventListener('resize', ()=>requestAnimationFrame(positionTabIndicator));   // 移动↔桌面切换时重对齐(等重排后)
