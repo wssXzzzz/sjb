@@ -117,6 +117,9 @@ def build_view():
     # ---- 近期未踢比赛预测列表（总览页高亮）----
     upcoming = _build_upcoming(sim, live, played_per_team)
 
+    # ---- 进行中/待数据：已开球但数据源未出分 ----
+    live_now = _build_live_now(sim)
+
     # ---- 复盘：赛前预测 vs 真实赛果 准确率 ----
     accuracy = _build_accuracy(live)
 
@@ -150,6 +153,7 @@ def build_view():
         "probs": probs_view,
         "champion_path": champion_path,
         "upcoming": upcoming,
+        "live_now": live_now,
         "accuracy": accuracy,
         "round16": _team_list(r16_teams),
         "round8": _team_list(r8_teams),
@@ -198,6 +202,27 @@ def _build_upcoming(sim, live, played_per_team, limit=16):
             "away_win": round(100 * (1 - wp), 0),
             "date": m["date"], "time": m["time"], "venue": m.get("venue", ""),
             "reasons": reasons,
+        })
+    return items
+
+
+def _build_live_now(sim, limit=6):
+    """已过开球时间但数据源仍未出比分的小组赛（"进行中/待数据"）。
+    与 _build_upcoming 互补：那边按同一 is_past_beijing 把这些场过滤掉了，
+    这里把它们单独捞出来给前端做"进行中"提示，避免比赛从界面凭空消失。"""
+    now_playing = [m for m in sim["group_matches"]
+                   if m.get("status") == "predicted"
+                   and LD.is_past_beijing(m.get("date"), m.get("time"))]
+    now_playing.sort(key=lambda m: (m.get("date") or "", m.get("time") or ""), reverse=True)
+    items = []
+    for m in now_playing[:limit]:
+        h, a = m["home"], m["away"]
+        items.append({
+            "group": m["group"], "md": m["md"],
+            "home_zh": W.TEAMS[h]["zh"], "away_zh": W.TEAMS[a]["zh"],
+            "home_flag": W.TEAMS[h]["flag"], "away_flag": W.TEAMS[a]["flag"],
+            "hg": m["hg"], "ag": m["ag"],
+            "date": m["date"], "time": m["time"],
         })
     return items
 

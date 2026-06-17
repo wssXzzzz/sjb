@@ -303,6 +303,53 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 :root[data-theme="dark"] .acc-sc.pred{color:#8db4ff;}
 .acc-mark{font-size:17px;flex:0 0 auto;width:24px;text-align:center;}
 .acc-mark.bad{filter:grayscale(.2);}
+
+/* 进行中 / 待数据 */
+.live-now-card{padding:12px 14px;margin-bottom:14px;border:1px solid rgba(232,150,40,.30);}
+.ln-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--third);margin-bottom:8px;}
+.ln-note{font-size:9.5px;font-weight:600;color:var(--text-3);background:var(--chip);padding:2px 6px;border-radius:6px;}
+.ln-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:12px;background:var(--third-bg);margin-bottom:5px;font-size:12px;}
+.ln-row:last-child{margin-bottom:0;}
+.ln-grp{font-size:9.5px;font-weight:600;color:var(--text-3);background:var(--chip-2);padding:2px 6px;border-radius:7px;flex:0 0 auto;}
+.ln-team{flex:1;min-width:0;display:flex;align-items:center;gap:5px;font-weight:600;color:var(--text-strong-2);}
+.ln-team2{flex:1;min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:5px;font-weight:600;color:var(--text-strong-2);}
+.ln-team .flag,.ln-team2 .flag{font-size:15px;}
+.ln-sc{font-weight:800;color:var(--third);font-variant-numeric:tabular-nums;min-width:34px;text-align:center;flex:0 0 auto;}
+.ln-tag{font-size:9px;font-weight:700;color:var(--third);background:rgba(232,150,40,.18);padding:2px 6px;border-radius:7px;flex:0 0 auto;}
+
+/* 淘汰赛 bracket 容器（移动端纵向堆叠 = 原竖排观感）*/
+.ko-bracket{display:flex;flex-direction:column;}
+
+/* ===================== 桌面端响应式 ===================== */
+@media (min-width:900px){
+  .wrap{max-width:1080px;padding-bottom:48px;}
+  .wrap > div:first-child{padding-top:88px !important;}
+  /* 导航移到顶部、横排 */
+  .tabbar{top:14px;bottom:auto;width:auto;max-width:none;}
+  .tab{flex:0 0 auto;flex-direction:row;gap:7px;padding:9px 18px;font-size:12.5px;border-radius:20px;}
+  .tab svg{width:17px;height:17px;}
+  .seg{max-width:1080px;}
+  /* 预测首页：大卡 + 赛程 两列 */
+  .predict-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;align-items:start;}
+  .predict-grid .next-card,.predict-grid .predict-sched{margin-bottom:0;}
+  /* 小组赛两列 */
+  .gp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  .gp-grid .gp-card{margin-bottom:0;}
+  /* 夺冠页 */
+  .heat{grid-template-columns:repeat(6,1fr);}
+  .champ-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  .champ-grid .section-card{margin-bottom:0;}
+  /* 复盘两列 */
+  .acc-list{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .acc-list .acc-row{margin-bottom:0;}
+  /* 淘汰赛：每轮一列，横向对阵树 */
+  .ko-bracket{flex-direction:row;align-items:stretch;gap:14px;overflow-x:auto;padding-bottom:8px;}
+  .ko-col{flex:1 1 0;min-width:200px;display:flex;flex-direction:column;justify-content:center;}
+  .ko-col .ko-round-label{margin:0 0 10px;text-align:center;}
+}
+@media (min-width:1280px){
+  .gp-grid{grid-template-columns:repeat(3,1fr);}
+}
 </style>
 </head>
 <body>
@@ -390,11 +437,31 @@ function switchView(name){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+/* 进行中 / 待数据：已开球但数据源未出分的场 */
+function liveNowHTML(){
+  const ln = V.live_now || [];
+  if(!ln.length) return '';
+  const rows = ln.map(m=>`
+    <div class="ln-row">
+      <span class="ln-grp">${m.group}组</span>
+      <span class="ln-team"><span class="flag">${m.home_flag}</span>${m.home_zh}</span>
+      <span class="ln-sc">${m.hg}-${m.ag}</span>
+      <span class="ln-team2">${m.away_zh}<span class="flag">${m.away_flag}</span></span>
+      <span class="ln-tag">预测</span>
+    </div>`).join('');
+  return `<div class="glass live-now-card">
+    <div class="ln-head"><span>⏱ 进行中 / 等待数据源更新</span><span class="ln-note">比分以官方为准</span></div>
+    ${rows}
+  </div>`;
+}
+
 /* ============ 预测首页 ============ */
 function predictHTML(){
+  const ln = liveNowHTML();
   const upcoming = V.upcoming || [];
   if(!upcoming.length){
-    return `<div class="view on" id="view-predict"><div class="empty">所有比赛已完赛 🎉</div></div>`;
+    const body = ln || `<div class="empty">所有比赛已完赛 🎉</div>`;
+    return `<div class="view on" id="view-predict">${body}</div>`;
   }
   // 第一场做大卡（突出展示 + 完整理由）
   const first = upcoming[0];
@@ -464,13 +531,16 @@ function predictHTML(){
 
   return `
   <div class="view on" id="view-predict">
-    ${bigCard}
-    <div class="glass" style="padding:14px 16px;margin-bottom:14px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div style="font-size:13px;font-weight:700;color:var(--text-1);">📋 近期赛程预测</div>
-        <span style="font-size:11px;color:var(--text-3);">共 ${upcoming.length} 场未踢 · 点击展开理由</span>
+    ${ln}
+    <div class="predict-grid">
+      ${bigCard}
+      <div class="glass predict-sched" style="padding:14px 16px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="font-size:13px;font-weight:700;color:var(--text-1);">📋 近期赛程预测</div>
+          <span style="font-size:11px;color:var(--text-3);">共 ${upcoming.length} 场未踢 · 点击展开理由</span>
+        </div>
+        ${restHTML}
       </div>
-      ${restHTML}
     </div>
   </div>`;
 }
@@ -543,6 +613,8 @@ function championHTML(){
       </div>
     </div>
 
+    <!-- 各阶段名单（桌面端 2 列）-->
+    <div class="champ-grid">
     <!-- 4强 -->
     <div class="glass section-card">
       <div class="card-h"><div class="ct"><span class="ic">🥉</span>预测四强</div></div>
@@ -563,6 +635,7 @@ function championHTML(){
     <div class="glass section-card">
       <div class="card-h"><div class="ct"><span class="ic">⚖️</span>晋级最佳第三名</div></div>
       <div style="display:flex;flex-wrap:wrap;gap:2px;">${thirds}</div>
+    </div>
     </div>
 
     <!-- 夺冠热力 -->
@@ -628,7 +701,7 @@ function accuracyHTML(){
         <div style="font-size:13px;font-weight:700;color:var(--text-1);">🔍 逐场复盘</div>
         <span style="font-size:11px;color:var(--text-3);">绿=真实 · 蓝=赛前预测</span>
       </div>
-      ${rows}
+      <div class="acc-list">${rows}</div>
     </div>
   </div>`;
 }
@@ -641,6 +714,7 @@ function groupsHTML(){
     <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-2);">
       <span class="dot q"></span>直接晋级(前2)　<span class="dot t"></span>小组第三·争最佳
     </div></div>`;
+  html += '<div class="gp-grid">';
   for(const g of groups){
     const data = V.groups[g];
     const matches = data.matches;
@@ -688,7 +762,7 @@ function groupsHTML(){
       </div>
     </div>`;
   }
-  html += '</div>';
+  html += '</div></div>';   // /.gp-grid /.view
   return html;
 }
 
@@ -701,16 +775,17 @@ function knockoutHTML(){
     {k:'SF',  zh:'半决赛 · Semi-finals'},
     {k:'F',   zh:'决赛 · Final'},
   ];
-  let html = '<div class="view" id="view-knockout">';
+  // 每轮一列：移动端纵向堆叠(≈原竖排)，桌面端横向并排 = 对阵树
+  let cols = '';
   for(const r of rounds){
     const ms = V.knockout.filter(m=>m.round===r.k);
     if(!ms.length) continue;
-    html += `<div class="ko-round-label">${r.zh}</div>`;
+    let cards = '';
     for(const m of ms){
       const isChamp = m.round==='F';
       const hw = m.hg>m.ag, aw = m.ag>m.hg;
       const penNote = m.pen ? `<span style="font-size:10px;color:var(--text-3);">(点球 ${m.pen})</span>` : '';
-      html += `<div class="ko-match ${isChamp&&m.winner.name===V.champion.name?'champ':''}">
+      cards += `<div class="ko-match ${isChamp&&m.winner.name===V.champion.name?'champ':''}">
         <div class="ko-date">${m.round_zh} · ${fmtDate(m.date)}</div>
         <div class="ko-side ${hw?'win':'lose'}">
           <div class="kt"><span class="flag">${m.home.flag}</span><span class="nm">${m.home.zh}</span></div>
@@ -723,9 +798,9 @@ function knockoutHTML(){
         ${penNote}
       </div>`;
     }
+    cols += `<div class="ko-col"><div class="ko-round-label">${r.zh}</div>${cards}</div>`;
   }
-  html += '</div>';
-  return html;
+  return `<div class="view" id="view-knockout"><div class="ko-bracket">${cols}</div></div>`;
 }
 
 /* ============ 概率图（夺冠页内嵌）============ */
