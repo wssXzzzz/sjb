@@ -13,7 +13,8 @@ from datetime import datetime, timedelta, timezone
 
 import wc_data as W
 
-API_URL = "https://api.openligadb.de/getmatchdata/wm2026"
+# 必须带赛季 /2026：不带赛季只返回当前一轮(24场)，带赛季返回完整 72 场
+API_URL = "https://api.openligadb.de/getmatchdata/wm2026/2026"
 CACHE_TTL = 300  # 5 分钟
 
 # 时区：展示统一用北京时间；兜底赛程里的硬编码时间是德国本地(夏令时 CEST=UTC+2)
