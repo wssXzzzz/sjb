@@ -17,4 +17,4 @@ ENV WARMUP=1
 EXPOSE 8000
 
 # 用 gunicorn 跑（比 Flask 开发服务器稳定）
-CMD ["gunicorn", "--preload", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120", "app:app"]
+CMD ["gunicorn", "--preload", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120", "app:app"]

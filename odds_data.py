@@ -28,7 +28,7 @@ REGIONS = "eu,uk"          # 欧洲市场博彩公司多、赔率 sharp
 MARKETS = "h2h"            # 1X2 三路（含平局）
 ODDS_FORMAT = "decimal"
 API_BASE = "https://api.the-odds-api.com/v4/sports"
-CACHE_TTL = 7200           # 2 小时（控配额：每天~12次 < 500/月）
+CACHE_TTL = 21600          # 6 小时（控配额：每天4次，~120/月 < 500；赔率日内变化不大）
 
 _cache = {"data": None, "ts": 0, "source": "online"}
 
