@@ -97,33 +97,40 @@ def sample_goals(rng, lam):
             return k - 1
 
 
-def play_match(rng, home, away, ko=False, played_per_team=None):
-    """模拟一场比赛，返回 (主队进球, 客队进球, 是否点球, 点球胜者)
-    ko=True 时淘汰赛平局需加时/点球决出胜者"""
+def play_match(rng, home, away, ko=False, played_per_team=None, deterministic=False):
+    """模拟一场比赛，返回 (主队进球, 客队进球, 点球胜者)
+    ko=True 时淘汰赛平局需加时/点球决出胜者。
+    deterministic=True：输出最可能比分（期望进球四舍五入），与 predicted_scoreline
+    口径一致，用于"单一确定性预测场景"（首页/小组赛/签表统一展示）；平局淘汰赛
+    由实力较强一方晋级。deterministic=False：泊松随机采样，用于蒙特卡洛概率统计。"""
     ea = win_prob(home, away, played_per_team)
     # 场均进球：小组赛略高，淘汰赛更保守
     total = 2.2 if ko else 2.7
     # 按 Elo 期望瓜分总进球
     lam_a = max(0.15, total * ea)
     lam_b = max(0.15, total * (1 - ea))
-    ga, gb = sample_goals(rng, lam_a), sample_goals(rng, lam_b)
+    if deterministic:
+        ga, gb = round(lam_a), round(lam_b)
+    else:
+        ga, gb = sample_goals(rng, lam_a), sample_goals(rng, lam_b)
 
     pen_winner = None
     if ko and ga == gb:
-        # 加时赛：再各加 30 分钟强度的泊松
-        ea_ot = win_prob(home, away, played_per_team)
-        ot_total = 0.8
-        lam_a_ot = max(0.05, ot_total * ea_ot)
-        lam_b_ot = max(0.05, ot_total * (1 - ea_ot))
-        ga_ot = sample_goals(rng, lam_a_ot)
-        gb_ot = sample_goals(rng, lam_b_ot)
-        ga += ga_ot
-        gb += gb_ot
-        # 仍平 → 点球（按 Elo 加权掷硬币，稍带随机）
-        if ga == gb:
-            p_home = 0.5 + (elo_of(home, played_per_team) - elo_of(away, played_per_team)) / 800.0
-            p_home = max(0.35, min(0.65, p_home))
-            pen_winner = home if rng.random() < p_home else away
+        if deterministic:
+            # 确定性：实力较强一方晋级（不引入随机加时/点球）
+            pen_winner = home if ea >= 0.5 else away
+        else:
+            # 加时赛：再各加 30 分钟强度的泊松
+            ot_total = 0.8
+            lam_a_ot = max(0.05, ot_total * ea)
+            lam_b_ot = max(0.05, ot_total * (1 - ea))
+            ga += sample_goals(rng, lam_a_ot)
+            gb += sample_goals(rng, lam_b_ot)
+            # 仍平 → 点球（按 Elo 加权掷硬币，稍带随机）
+            if ga == gb:
+                p_home = 0.5 + (elo_of(home, played_per_team) - elo_of(away, played_per_team)) / 800.0
+                p_home = max(0.35, min(0.65, p_home))
+                pen_winner = home if rng.random() < p_home else away
     return ga, gb, pen_winner
 
 
@@ -139,10 +146,11 @@ def match_winner(ga, gb, pen_winner, home, away):
 # ---------------------------------------------------------------------------
 # 小组赛
 # ---------------------------------------------------------------------------
-def simulate_groups(rng, played_per_team=None, real_index=None):
+def simulate_groups(rng, played_per_team=None, real_index=None, deterministic=False):
     """模拟全部 72 场小组赛。
     - real_index: {frozenset(t1,t2): (hg,ag)} 已踢真实比分；命中则用真实
     - played_per_team: 动态 Elo 依据
+    - deterministic: True 时未踢场用最可能比分（确定性，前端统一展示用）
     返回:
       standings, all_matches(含 status 标记), third_teams
     """
@@ -160,7 +168,9 @@ def simulate_groups(rng, played_per_team=None, real_index=None):
                 status = "finished"
             else:
                 # 未踢：模型预测
-                ga, gb, _ = play_match(rng, home, away, ko=False, played_per_team=played_per_team)
+                ga, gb, _ = play_match(rng, home, away, ko=False,
+                                       played_per_team=played_per_team,
+                                       deterministic=deterministic)
                 status = "predicted"
             all_matches.append({
                 "group": g, "md": md, "home": home, "away": away,
@@ -267,9 +277,10 @@ def resolve_seed(seed, group_winners, group_runners, third_assignment, winners):
     return None
 
 
-def simulate_knockout(rng, standings, third_assignment, played_per_team=None):
+def simulate_knockout(rng, standings, third_assignment, played_per_team=None, deterministic=False):
     """推进完整淘汰赛，返回 (matches_list, champion)
     matches_list: 每场比赛 {id, round, home, away, hg, ag, pen, winner, date, venue}
+    deterministic: True 时用最可能比分、平局由强者晋级（确定性签表）。
     """
     # 抽取每组 1/2 名
     group_winners = {g: s[0]["team"] for g, s in standings.items()}
@@ -300,7 +311,9 @@ def simulate_knockout(rng, standings, third_assignment, played_per_team=None):
             away = third_assignment.get(m["id"])
 
         # 所有淘汰赛都需决出胜者（平局加时/点球）
-        ga, gb, pen_winner = play_match(rng, home, away, ko=True, played_per_team=played_per_team)
+        ga, gb, pen_winner = play_match(rng, home, away, ko=True,
+                                        played_per_team=played_per_team,
+                                        deterministic=deterministic)
         winner, loser = match_winner(ga, gb, pen_winner, home, away)
 
         winners[m["id"][1:]] = winner  # "M17" → "17"
@@ -318,13 +331,15 @@ def simulate_knockout(rng, standings, third_assignment, played_per_team=None):
 # ---------------------------------------------------------------------------
 # 一次完整模拟
 # ---------------------------------------------------------------------------
-def simulate_tournament(rng, played_per_team=None, real_index=None):
+def simulate_tournament(rng, played_per_team=None, real_index=None, deterministic=False):
     """完整模拟一届赛事，返回 dict。
     - played_per_team: 已踢真实比赛（动态 Elo 依据）
     - real_index: 已踢真实比分（命中用真实，否则预测）
+    - deterministic: True 时整届用最可能比分推演（首页/小组赛/签表一致的单一预测场景）
     """
     standings, group_matches, third_teams = simulate_groups(
-        rng, played_per_team=played_per_team, real_index=real_index)
+        rng, played_per_team=played_per_team, real_index=real_index,
+        deterministic=deterministic)
 
     # 建立 standings 索引便于查第三名
     sindex = {}
@@ -335,7 +350,8 @@ def simulate_tournament(rng, played_per_team=None, real_index=None):
     third_assignment = assign_thirds(qualified_thirds)
 
     ko_results, champion = simulate_knockout(
-        rng, standings, third_assignment, played_per_team=played_per_team)
+        rng, standings, third_assignment, played_per_team=played_per_team,
+        deterministic=deterministic)
 
     # 决赛两队 & 半决赛败者（用于亚军/四强）
     final = next(r for r in ko_results if r["round"] == "F")
@@ -398,8 +414,10 @@ MASTER_SEED = 20260616
 
 
 def get_prediction(live=None):
-    """生成预测。live 为 live_data.fetch_matches() 的返回；
-    为空或离线时退化为纯预测。"""
+    """生成"单一确定性预测场景"：未踢场一律用最可能比分推演，
+    保证首页/小组赛/积分榜/签表展示的同一场比分完全一致。
+    live 为 live_data.fetch_matches() 的返回；为空或离线时退化为纯预测。
+    （夺冠等概率另由 get_probs 的蒙特卡洛随机统计给出，两者用途不同。）"""
     played_per_team = None
     real_index = {}
     if live and live.get("source") == "online" and live.get("matches"):
@@ -407,7 +425,8 @@ def get_prediction(live=None):
         played_per_team = LD.played_games_per_team(live)
         real_index = LD.real_results_index(live)
     rng = random.Random(MASTER_SEED)
-    return simulate_tournament(rng, played_per_team=played_per_team, real_index=real_index)
+    return simulate_tournament(rng, played_per_team=played_per_team,
+                               real_index=real_index, deterministic=True)
 
 
 def get_probs(live=None, n=1000):

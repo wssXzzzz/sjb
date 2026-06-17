@@ -186,16 +186,14 @@ def _build_upcoming(sim, live, played_per_team, limit=16):
     for m in upcoming[:limit]:
         h, a = m["home"], m["away"]
         wp = P.win_prob(h, a, played_per_team)
-        # 首页展示用「最可能比分」（与胜率方向一致），而非单次随机模拟值，
-        # 避免出现「84% 胜率却预测 0-0」这类自相矛盾的观感。
-        phg, pag = P.predicted_scoreline(h, a, played_per_team)
-        reasons = R.generate_reasons(h, a, played_per_team, phg, pag)
+        # 直接用 sim 里的比分（确定性=最可能比分），保证与小组赛页同场一致
+        reasons = R.generate_reasons(h, a, played_per_team, m["hg"], m["ag"])
         items.append({
             "group": m["group"], "md": m["md"],
             "home": h, "away": a,
             "home_zh": W.TEAMS[h]["zh"], "away_zh": W.TEAMS[a]["zh"],
             "home_flag": W.TEAMS[h]["flag"], "away_flag": W.TEAMS[a]["flag"],
-            "hg": phg, "ag": pag,
+            "hg": m["hg"], "ag": m["ag"],
             "home_win": round(100 * wp, 0),
             "away_win": round(100 * (1 - wp), 0),
             "date": m["date"], "time": m["time"], "venue": m.get("venue", ""),
