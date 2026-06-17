@@ -72,18 +72,6 @@ def win_prob(a, b, played_per_team=None):
     return ea
 
 
-def predicted_scoreline(home, away):
-    """赛前最可能比分（整数）：仅用赛前基础 Elo 的期望进球四舍五入。
-    刻意不使用赛事内任何已踢结果（也不用动态 Elo），这样拿它和真实赛果对比、
-    计算预测准确率时不存在信息泄漏——相当于一次诚实的"赛前预测复盘"。
-    返回 (home_goals, away_goals)。"""
-    ea = win_prob(home, away)            # 赛前基础 Elo 胜率（played_per_team=None）
-    total = 2.7                          # 小组赛场均总进球，与 play_match 保持一致
-    lam_home = max(0.15, total * ea)
-    lam_away = max(0.15, total * (1 - ea))
-    return round(lam_home), round(lam_away)
-
-
 def predicted_scoreline(home, away, played_per_team=None):
     """最可能比分（整数）：按期望进球四舍五入，与胜率方向天然一致。
     - played_per_team=None（默认）：仅用赛前基础 Elo。复盘准确率用此口径，
