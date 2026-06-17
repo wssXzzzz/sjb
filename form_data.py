@@ -2,7 +2,9 @@
 """
 近期战绩数据层：从 OpenLigaDB 大赛（欧洲杯/美洲杯/欧国联/世界杯）抓取每队近期战绩，
 计算胜率、场均进球失球，并派生历史交锋（h2h）。
-缓存 5 分钟（与 live_data 对齐）。诚实标注：友谊赛/小赛事不在源里，CAF/AFC 队可能样本不足。
+缓存 1 小时：语料里欧洲杯/美洲杯/欧国联 2024 是静态历史，世界杯部分对 h2h 几乎无影响
+（h2h 需 sample_n≥3，两队在 WC 只碰一次触发不了），故无需 5 分钟高频重抓 4 个端点。
+诚实标注：友谊赛/小赛事不在源里，CAF/AFC 队可能样本不足。
 """
 import json
 import time
@@ -19,7 +21,7 @@ TOURNAMENTS = [
     ("wm2026/2026", "世界杯"),
 ]
 API_BASE = "https://api.openligadb.de/getmatchdata/"
-CACHE_TTL = 300  # 5 分钟
+CACHE_TTL = 3600  # 1 小时（语料基本静态，详见模块说明）
 
 _cache = {"data": None, "ts": 0}
 
