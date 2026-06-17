@@ -10,15 +10,16 @@ import live_data as LD
 
 
 def test_base_elo_monotonic_and_host_bonus():
-    """排名越高 Elo 越高；东道主有 +80 加成。"""
+    """排名越高 Elo 越高；东道主有主场加成。"""
     spain = P.base_elo("Spain")        # rank 1
     ghana = P.base_elo("Ghana")        # rank 72
     assert spain > ghana, "排名靠前的队 Elo 应更高"
 
-    # 东道主加成：墨西哥(rank15,host) 相比同公式无加成应高 80
+    # 东道主加成：墨西哥(rank15, host) = 基础公式 + HOST_BONUS
     mexico = P.base_elo("Mexico")
     assert W.TEAMS["Mexico"]["host"] is True
-    assert mexico == 2050 - 15 * 18 + 80
+    assert mexico == P.ELO_BASE - 15 * P.ELO_SLOPE + P.HOST_BONUS
+    assert P.HOST_BONUS > 0
 
 
 def test_group_stage_match_count_and_points_conservation():

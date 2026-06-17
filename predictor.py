@@ -20,12 +20,20 @@ import wc_data as W
 _elo_cache = {}
 
 
+# 基础实力标定：斜率不宜过陡，否则强弱差被放大、几乎场场一边倒、不出平局。
+# ×8 使强队仍明显占优(西班牙vs加纳≈95%)，但中上游对话回到合理区间(法国vs塞内加尔≈66%)，
+# 最可能比分里自然出现约 20% 的平局，贴近真实小组赛平局率。
+ELO_BASE = 2050
+ELO_SLOPE = 8
+HOST_BONUS = 60
+
+
 def base_elo(team):
-    """FIFA 排名位次 → 基础 Elo 分（rank1≈2032，rank86≈502）"""
+    """FIFA 排名位次 → 基础 Elo 分（rank1≈2042，rank86≈1362；东道主另加）"""
     rank = W.TEAMS[team]["rank"]
-    elo = 2050 - rank * 18
+    elo = ELO_BASE - rank * ELO_SLOPE
     if W.TEAMS[team].get("host"):
-        elo += 80  # 东道主加成
+        elo += HOST_BONUS  # 东道主主场加成
     return elo
 
 
@@ -72,17 +80,36 @@ def win_prob(a, b, played_per_team=None):
     return ea
 
 
+def _poisson_pmf(k, lam):
+    """泊松概率质量 P(X=k)"""
+    return math.exp(-lam) * lam ** k / math.factorial(k)
+
+
+def _likely_scoreline(ea, total, max_goals=8):
+    """最可能比分 = 双方独立泊松联合分布中概率最高的那个比分。
+    用「众数(mode≈⌊λ⌋)」而非「期望四舍五入」——后者会把强队进球数高估、
+    抹掉本应出现的 1-1 平局。实力接近(ea≈0.5)时自然给出平局，符合真实平局率。"""
+    lam_h = max(0.15, total * ea)
+    lam_a = max(0.15, total * (1 - ea))
+    ph = [_poisson_pmf(i, lam_h) for i in range(max_goals + 1)]
+    pa = [_poisson_pmf(j, lam_a) for j in range(max_goals + 1)]
+    best_p, best = -1.0, (0, 0)
+    for i in range(max_goals + 1):
+        for j in range(max_goals + 1):
+            p = ph[i] * pa[j]
+            if p > best_p:
+                best_p, best = p, (i, j)
+    return best
+
+
 def predicted_scoreline(home, away, played_per_team=None):
-    """最可能比分（整数）：按期望进球四舍五入，与胜率方向天然一致。
+    """最可能比分（整数）：取双方泊松联合分布的众数比分。
     - played_per_team=None（默认）：仅用赛前基础 Elo。复盘准确率用此口径，
       刻意不看赛事内结果 → 无信息泄漏。
     - 传入 played_per_team：用动态 Elo（含已踢真实表现），用于首页未踢比赛展示。
     返回 (home_goals, away_goals)。"""
     ea = win_prob(home, away, played_per_team)
-    total = 2.7                          # 小组赛场均总进球，与 play_match 保持一致
-    lam_home = max(0.15, total * ea)
-    lam_away = max(0.15, total * (1 - ea))
-    return round(lam_home), round(lam_away)
+    return _likely_scoreline(ea, total=2.7)   # 2.7：小组赛场均总进球，与 play_match 一致
 
 
 def sample_goals(rng, lam):
@@ -106,12 +133,13 @@ def play_match(rng, home, away, ko=False, played_per_team=None, deterministic=Fa
     ea = win_prob(home, away, played_per_team)
     # 场均进球：小组赛略高，淘汰赛更保守
     total = 2.2 if ko else 2.7
-    # 按 Elo 期望瓜分总进球
-    lam_a = max(0.15, total * ea)
-    lam_b = max(0.15, total * (1 - ea))
     if deterministic:
-        ga, gb = round(lam_a), round(lam_b)
+        # 最可能比分（众数），与 predicted_scoreline 同口径
+        ga, gb = _likely_scoreline(ea, total)
     else:
+        # 按 Elo 期望瓜分总进球后泊松随机采样
+        lam_a = max(0.15, total * ea)
+        lam_b = max(0.15, total * (1 - ea))
         ga, gb = sample_goals(rng, lam_a), sample_goals(rng, lam_b)
 
     pen_winner = None
