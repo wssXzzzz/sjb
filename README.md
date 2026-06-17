@@ -77,5 +77,7 @@ python test_predictor.py   # 跑离线单测
 
 ## ⚠️ 说明
 - 分组依据 2025-12-05 抽签；FIFA 排名为 2025-11 排名
+- **开赛时间统一为北京时间**：以 OpenLigaDB 的 `matchDateTimeUTC` 为准换算；
+  尚未发布的轮次退回兜底赛程（按德国本地 CEST 折算）
 - 未踢比赛预测仅为模型娱乐，不代表真实赛果
 - 数据源：OpenLigaDB（社区维护，可能有延迟）

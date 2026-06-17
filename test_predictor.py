@@ -6,6 +6,7 @@ import random
 
 import predictor as P
 import wc_data as W
+import live_data as LD
 
 
 def test_base_elo_monotonic_and_host_bonus():
@@ -101,6 +102,19 @@ def test_get_prediction_offline_is_deterministic():
     b = P.get_prediction(live=None)
     assert a["champion"] == b["champion"]
     assert a["runner_up"] == b["runner_up"]
+
+
+def test_kickoff_times_converted_to_beijing():
+    """开赛时间换算：UTC→北京(+8)、德国本地CEST→北京(+6)，含跨日。"""
+    # 19:00Z → 次日 03:00 北京
+    assert LD.to_beijing("2026-06-16T19:00:00Z") == ("2026-06-17", "03:00")
+    # 带 +00:00 写法也能解析
+    assert LD.to_beijing("2026-06-11T19:00:00+00:00") == ("2026-06-12", "03:00")
+    # 兜底：德国本地(CEST=UTC+2) 19:00 → 北京 +6 = 次日 01:00
+    assert LD.berlin_to_beijing("2026-06-18", "19:00") == ("2026-06-19", "01:00")
+    # 非法输入安全降级
+    assert LD.to_beijing("") == (None, None)
+    assert LD.berlin_to_beijing(None, None) == (None, None)
 
 
 if __name__ == "__main__":

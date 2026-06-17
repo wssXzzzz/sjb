@@ -9,13 +9,53 @@ import json
 import time
 import urllib.request
 import urllib.error
+from datetime import datetime, timedelta, timezone
 
 import wc_data as W
 
 API_URL = "https://api.openligadb.de/getmatchdata/wm2026"
 CACHE_TTL = 300  # 5 分钟
 
+# 时区：展示统一用北京时间；兜底赛程里的硬编码时间是德国本地(夏令时 CEST=UTC+2)
+BEIJING = timezone(timedelta(hours=8))
+BERLIN_SUMMER = timezone(timedelta(hours=2))
+
 _cache = {"data": None, "ts": 0, "source": "online"}
+
+
+def _parse_utc(iso):
+    """'2026-06-11T19:00:00Z' 或 '...+00:00' → 带时区的 UTC datetime；失败返回 None"""
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            dt = datetime.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def to_beijing(utc_iso):
+    """UTC ISO 字符串 → (date 'YYYY-MM-DD', time 'HH:MM') 北京时间；失败返回 (None, None)"""
+    dt = _parse_utc(utc_iso)
+    if not dt:
+        return None, None
+    bj = dt.astimezone(BEIJING)
+    return bj.strftime("%Y-%m-%d"), bj.strftime("%H:%M")
+
+
+def berlin_to_beijing(date, tm):
+    """兜底赛程的德国本地(CEST)日期时间 → 北京时间 (date, time)；失败原样返回"""
+    try:
+        dt = datetime.strptime(f"{date} {tm}", "%Y-%m-%d %H:%M").replace(tzinfo=BERLIN_SUMMER)
+    except (ValueError, TypeError):
+        return date, tm
+    bj = dt.astimezone(BEIJING)
+    return bj.strftime("%Y-%m-%d"), bj.strftime("%H:%M")
 
 
 def _parse_result(match):
@@ -77,13 +117,15 @@ def fetch_matches(force=False):
         is_ko = _is_knockout(m)
         g = None if is_ko else W.find_group(t1, t2)
         md = W.find_matchday(g, t1, t2) if g else None
-        dt = (m.get("matchDateTime") or "")[:16].replace("T", " ")
-        date = (m.get("matchDateTime") or "")[:10]
-        tm = (m.get("matchDateTime") or "")[11:16]
+        # 权威开赛时间取 matchDateTimeUTC（带 Z 的真 UTC），换算成北京时间展示
+        utc = m.get("matchDateTimeUTC")
+        date, tm = to_beijing(utc)
+        dt = f"{date} {tm}" if date else ""
         venue = _lookup_venue(g, t1, t2)
         matches.append({
             "team1": t1, "team2": t2, "group": g, "md": md,
             "date": date, "time": tm, "datetime": dt, "venue": venue,
+            "utc": utc,
             "finished": finished, "hg": hg, "ag": ag,
             "is_knockout": is_ko, "api_id": m.get("matchID"),
         })
@@ -160,6 +202,16 @@ def real_results_index(live):
     for m in live["matches"]:
         if m["finished"] and m["hg"] is not None:
             idx[frozenset((m["team1"], m["team2"]))] = (m["hg"], m["ag"])
+    return idx
+
+
+def schedule_index(live):
+    """已发布对阵的权威开赛时间 {frozenset(t1,t2): utc_iso}（仅小组赛）。
+    OpenLigaDB 目前仅含已开赛轮次，未发布的轮次不会出现在此索引中。"""
+    idx = {}
+    for m in live.get("matches", []):
+        if m.get("utc") and not m.get("is_knockout"):
+            idx[frozenset((m["team1"], m["team2"]))] = m["utc"]
     return idx
 
 

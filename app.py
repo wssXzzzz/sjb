@@ -32,6 +32,19 @@ def build_view():
     sim = P.get_prediction(live)
     probs = P.get_probs(live, n=1000)
 
+    # ---- 开赛时间统一为北京时间 ----
+    # 权威来源：OpenLigaDB 的 matchDateTimeUTC；未发布的轮次退回兜底赛程
+    # （兜底里硬编码的是德国本地 CEST 时间，按 +6h 折算成北京时间）。
+    sched_idx = LD.schedule_index(live)
+    for m in sim["group_matches"]:
+        utc = sched_idx.get(frozenset((m["home"], m["away"])))
+        if utc:
+            d, t = LD.to_beijing(utc)
+        else:
+            d, t = LD.berlin_to_beijing(m["date"], m["time"])
+        if d and t:
+            m["date"], m["time"] = d, t
+
     # ---- 小组赛视图 ----
     groups_view = {}
     for g in W.all_group_names():
