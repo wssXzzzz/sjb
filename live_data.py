@@ -45,6 +45,16 @@ def _now_beijing():
     return datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M")
 
 
+def is_past_beijing(date_bj, tm_bj):
+    """给定北京时间 date/time 是否已到/已过（即已开赛）。
+    解析失败一律按"未开赛"处理，避免误删未来比赛。"""
+    try:
+        dt = datetime.strptime(f"{date_bj} {tm_bj}", "%Y-%m-%d %H:%M").replace(tzinfo=BEIJING)
+    except (ValueError, TypeError):
+        return False
+    return datetime.now(BEIJING) >= dt
+
+
 def to_beijing(utc_iso):
     """UTC ISO 字符串 → (date 'YYYY-MM-DD', time 'HH:MM') 北京时间；失败返回 (None, None)"""
     dt = _parse_utc(utc_iso)

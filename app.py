@@ -174,8 +174,10 @@ def build_view():
 def _build_upcoming(sim, live, played_per_team, limit=16):
     """总览页高亮：所有未踢比赛的预测，按时间排序。
     返回 list，每场含预测比分+胜率。按日期分组返回便于 UI 展示。"""
+    # 只保留"尚未开赛"的预测场：已过开球时间的（即便数据源还没标记完赛）不再算下一场
     upcoming = [m for m in sim["group_matches"]
-                if m.get("status") == "predicted"]
+                if m.get("status") == "predicted"
+                and not LD.is_past_beijing(m.get("date"), m.get("time"))]
     if not upcoming:
         return []
     # 按日期+时间排序

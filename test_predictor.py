@@ -117,6 +117,14 @@ def test_kickoff_times_converted_to_beijing():
     assert LD.berlin_to_beijing(None, None) == (None, None)
 
 
+def test_is_past_beijing():
+    """已开赛判断：过去为 True、未来为 False、非法输入按未开赛(False)。"""
+    assert LD.is_past_beijing("2000-01-01", "00:00") is True   # 远古
+    assert LD.is_past_beijing("2099-12-31", "23:59") is False  # 远未来
+    assert LD.is_past_beijing(None, None) is False             # 非法
+    assert LD.is_past_beijing("bad", "x") is False
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
