@@ -27,15 +27,15 @@ def team_view(name, played_per_team=None):
             "elo": round(P.elo_of(name, played_per_team))}
 
 
-def build_view():
+def build_view(force_sources=False):
     """构建完整页面数据：实时抓取真实赛果 + 动态 Elo 预测"""
-    live = LD.fetch_matches()
+    live = LD.fetch_matches(force=force_sources)
     played_per_team = (LD.played_games_per_team(live)
                        if live.get("source") == "online" else None)
     # 多维度数据：阵容质量（Wikipedia）+ 近期战绩（OpenLigaDB 大赛）+ 赔率（The Odds API）
-    squads = SD.fetch_squads()
-    form = FD.fetch_form()
-    odds = OD.fetch_odds()
+    squads = SD.fetch_squads(force=force_sources)
+    form = FD.fetch_form(force=force_sources)
+    odds = OD.fetch_odds(force=force_sources)
     P.set_dimensions(squads=squads, form=form, odds=odds)   # 注入预测器（模块级）
     sim = P.get_prediction(live)
     probs = P.get_probs(live, n=1000)
@@ -197,7 +197,7 @@ def _build_upcoming(sim, live, played_per_team, squads=None, form=None, odds=Non
     items = []
     for m in upcoming[:limit]:
         h, a = m["home"], m["away"]
-        wp = P.win_prob(h, a, played_per_team)
+        pH, pD, pA = P.blend_1x2(h, a, played_per_team)
         # 直接用 sim 里的比分（确定性=最可能比分），保证与小组赛页同场一致
         reasons = R.generate_reasons(h, a, played_per_team, m["hg"], m["ag"],
                                       squads=squads, form=form, odds=odds)
@@ -207,8 +207,9 @@ def _build_upcoming(sim, live, played_per_team, squads=None, form=None, odds=Non
             "home_zh": W.TEAMS[h]["zh"], "away_zh": W.TEAMS[a]["zh"],
             "home_flag": W.TEAMS[h]["flag"], "away_flag": W.TEAMS[a]["flag"],
             "hg": m["hg"], "ag": m["ag"],
-            "home_win": round(100 * wp, 0),
-            "away_win": round(100 * (1 - wp), 0),
+            "home_win": round(100 * pH, 0),
+            "draw": round(100 * pD, 0),
+            "away_win": round(100 * pA, 0),
             "date": m["date"], "time": m["time"], "venue": m.get("venue", ""),
             "reasons": reasons,
         })
@@ -286,10 +287,10 @@ _VIEW_CACHE = {"data": None, "ts": 0}
 _VIEW_TTL = 300
 
 
-def get_view(force=False):
+def get_view(force=False, force_sources=False):
     now = time.time()
     if force or not _VIEW_CACHE["data"] or (now - _VIEW_CACHE["ts"]) > _VIEW_TTL:
-        _VIEW_CACHE["data"] = build_view()
+        _VIEW_CACHE["data"] = build_view(force_sources=force_sources)
         _VIEW_CACHE["ts"] = now
     return _VIEW_CACHE["data"]
 
@@ -319,8 +320,7 @@ def api_data():
 @app.route("/api/refresh")
 def api_refresh():
     """强制刷新（重新抓 API + 重建预测）"""
-    LD.fetch_matches(force=True)
-    return jsonify(get_view(force=True))
+    return jsonify(get_view(force=True, force_sources=True))
 
 
 if __name__ == "__main__":

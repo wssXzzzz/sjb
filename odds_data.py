@@ -8,7 +8,7 @@
 - 无 key/超额/失败 → 返回 {} → predictor 全程回退纯模型（与现状完全一致）
 
 设计（ODDS_PLAN.md §1 §2 §6）：
-- 一次请求返回所有已开盘 WC 比赛 → 配 2h 长缓存控配额（每天~12次 < 500）
+- 一次请求返回所有已开盘 WC 比赛 → 配 6h 长缓存控配额（每天~4次，约120次/月）
 - 去水：p_i = (1/o_i) / Σ(1/o_j)
 - 多家先各自去水再跨家取均值，记 books_n
 - 输出 {(api_home,api_away): {pH(=api_home胜),pD,pA(=api_away胜),books_n,updated}}

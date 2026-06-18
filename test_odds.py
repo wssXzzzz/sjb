@@ -105,6 +105,21 @@ def test_scoreline_direction_consistency():
     print("  ✓ test_scoreline_direction_consistency")
 
 
+def test_random_matches_follow_blended_market_direction():
+    """蒙特卡洛单场抽样应使用融合赔率，而不是仅使用 Elo。"""
+    import random
+    odds = {("France", "Senegal"): {"pH": 0.05, "pD": 0.05, "pA": 0.90, "books_n": 10}}
+    P.set_dimensions(odds=odds)
+    rng = random.Random(2026)
+    away_wins = 0
+    for _ in range(300):
+        hg, ag, _ = P.play_match(rng, "France", "Senegal")
+        away_wins += ag > hg
+    P.set_dimensions()
+    assert away_wins > 180, f"极端客胜市场下应多数客胜，实际 {away_wins}/300"
+    print("  ✓ test_random_matches_follow_blended_market_direction")
+
+
 def run_all():
     print("赔率融合单测：")
     test_implied_probs_vig_removal()
@@ -114,7 +129,8 @@ def run_all():
     test_blend_fallback_no_odds()
     test_review_isolation_use_odds_false()
     test_scoreline_direction_consistency()
-    print("7/7 通过")
+    test_random_matches_follow_blended_market_direction()
+    print("8/8 通过")
 
 
 if __name__ == "__main__":

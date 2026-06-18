@@ -5,7 +5,7 @@
 - 实力模型：FIFA 排名 → Elo → 泊松进球采样
 - 小组赛积分 → 12 名第三名取前 8 → 二分匹配分配到 R32 槽位
 - 完整淘汰赛推进至决赛
-- 蒙特卡洛 2000 次 → 夺冠/进决赛/四强/十六强概率
+- 蒙特卡洛 1000 次 → 夺冠/进决赛/四强/十六强概率
 """
 import math
 import random
@@ -295,10 +295,19 @@ def play_match(rng, home, away, ko=False, played_per_team=None, deterministic=Fa
         b = blend_1x2(home, away, played_per_team, total)
         ga, gb = _scoreline_from_1x2(b, total)
     else:
-        # 按 Elo 期望瓜分总进球后泊松随机采样（蒙特卡洛）
+        # 先按融合 1X2 抽取赛果方向，再在对应泊松区域内抽比分。
+        # 这样蒙特卡洛与页面确定性预测使用同一赔率口径。
         lam_a = max(0.15, total * ea)
         lam_b = max(0.15, total * (1 - ea))
-        ga, gb = sample_goals(rng, lam_a), sample_goals(rng, lam_b)
+        pH, pD, pA = blend_1x2(home, away, played_per_team, total)
+        roll = rng.random()
+        direction = 0 if roll < pH else (1 if roll < pH + pD else 2)
+        while True:
+            ga, gb = sample_goals(rng, lam_a), sample_goals(rng, lam_b)
+            if ((direction == 0 and ga > gb) or
+                    (direction == 1 and ga == gb) or
+                    (direction == 2 and ga < gb)):
+                break
 
     pen_winner = None
     if ko and ga == gb:
@@ -334,7 +343,7 @@ def match_winner(ga, gb, pen_winner, home, away):
 # ---------------------------------------------------------------------------
 def simulate_groups(rng, played_per_team=None, real_index=None, deterministic=False):
     """模拟全部 72 场小组赛。
-    - real_index: {frozenset(t1,t2): (hg,ag)} 已踢真实比分；命中则用真实
+    - real_index: {(home,away): (hg,ag)} 已踢真实比分；支持反向对齐
     - played_per_team: 动态 Elo 依据
     - deterministic: True 时未踢场用最可能比分（确定性，前端统一展示用）
     返回:
@@ -347,10 +356,15 @@ def simulate_groups(rng, played_per_team=None, real_index=None, deterministic=Fa
 
     for g, teams in W.GROUPS.items():
         for (md, home, away, date, tm, venue) in W.GROUP_SCHEDULE[g]:
-            key = frozenset((home, away))
+            key = (home, away)
+            reverse_key = (away, home)
             if key in real_index:
                 # 已踢：用真实比分
                 ga, gb = real_index[key]
+                status = "finished"
+            elif reverse_key in real_index:
+                # 数据源主客顺序与兜底赛程相反时，对调比分
+                gb, ga = real_index[reverse_key]
                 status = "finished"
             else:
                 # 未踢：模型预测
@@ -551,7 +565,7 @@ def simulate_tournament(rng, played_per_team=None, real_index=None, deterministi
         "ko_results": ko_results,
         "champion": champion,
         "runner_up": final["loser"],
-        "semifinalists": [s["loser"] for s in sf],
+        "semifinalists": [t for s in sf for t in (s["home"], s["away"])],
         "finalists": [final["home"], final["away"]],
     }
 
@@ -572,13 +586,8 @@ def monte_carlo(n=1000, base_seed=20260616, played_per_team=None, real_index=Non
             counts[t]["final"] += 1
         for t in sim["semifinalists"]:
             counts[t]["sf"] += 1
-        # 十六强 = 进入 R32 的 32 队（小组前2 + 8第三名）
-        r16 = set()
-        for g, rows in sim["standings"].items():
-            for r in rows[:2]:
-                r16.add(r["team"])
-        for qt in sim["qualified_thirds"]:
-            r16.add(qt["team"])
+        # 十六强 = R32 的 16 个胜者
+        r16 = {r["winner"] for r in sim["ko_results"] if r["round"] == "R32"}
         for t in r16:
             counts[t]["r16"] += 1
 

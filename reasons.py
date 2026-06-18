@@ -121,7 +121,7 @@ def _odds_point(fav, opp, home, away, odds):
     fav_pct = round(100 * (ov["pH"] if fav_is_home else ov["pA"]))
     try:
         import predictor as P
-        b = P.blend_1x2(home, away)
+        b = P.model_1x2(home, away)
         model_fav_pct = round(100 * (b[0] if fav_is_home else b[2]))
     except Exception:
         model_fav_pct = None
@@ -154,17 +154,19 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None,
         fav = home if wp >= 0.5 else away
     fav_zh = _team_zh(fav)
     fav_pct = round(100 * max(b1x2[0], b1x2[2])) if b1x2 else round(100 * max(wp, 1 - wp))
-    opp_pct = 100 - fav_pct
     opp = away if fav == home else home
     opp_zh = _team_zh(opp)
+    opp_pct = (round(100 * (b1x2[2] if fav == home else b1x2[0]))
+               if b1x2 else 100 - fav_pct)
 
     points = []
     summary = ""
 
     # ---- 要点1：FIFA 排名对比 ----
     h_rank, a_rank = h_meta["rank"], a_meta["rank"]
-    rank_diff = abs(h_rank - a_rank)
-    points.append(f"FIFA排名：{fav_zh}第{min(h_rank,a_rank)}位 vs {opp_zh}第{max(h_rank,a_rank)}位")
+    fav_rank = h_rank if fav == home else a_rank
+    opp_rank = a_rank if fav == home else h_rank
+    points.append(f"FIFA排名：{fav_zh}第{fav_rank}位 vs {opp_zh}第{opp_rank}位")
 
     # ---- 要点2：实力推导（Elo→胜率因果链，含阵容修正；胜率用融合值）----
     # 融合 1X2（含赔率）的方向和胜率，保证与预测比分口径一致
@@ -177,10 +179,12 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None,
         # 看好方可能是 home 或 away
         fav_is_home = (fav == home)
         blend_fav_pct = round(100 * (b1x2[0] if fav_is_home else b1x2[2]))
-        points.append(f"实力分：{fav_zh} {max(h_elo,a_elo)} vs {opp_zh} {min(h_elo,a_elo)}（差{abs(elo_diff)}）→ 融合胜率{blend_fav_pct}%")
+        fav_elo = h_elo if fav == home else a_elo
+        opp_elo = a_elo if fav == home else h_elo
+        points.append(f"实力分：{fav_zh} {fav_elo} vs {opp_zh} {opp_elo}（差{abs(elo_diff)}）→ 融合胜率{blend_fav_pct}%")
         # 更新 fav_pct 为融合值（供总评用）
         fav_pct = blend_fav_pct
-        opp_pct = 100 - fav_pct
+        opp_pct = round(100 * (b1x2[2] if fav_is_home else b1x2[0]))
     else:
         points.append(f"实力分：{fav_zh} {max(h_elo,a_elo)} vs {opp_zh} {min(h_elo,a_elo)}（差{abs(elo_diff)}→胜率{fav_pct}%）")
 
@@ -219,7 +223,7 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None,
     situ = []
     if h_meta.get("host") or a_meta.get("host"):
         host_team = home if h_meta.get("host") else away
-        situ.append(f"{_team_zh(host_team)}为东道主，享主场加成(+80)")
+        situ.append(f"{_team_zh(host_team)}为东道主，享主场加成(+{P.HOST_BONUS})")
     if h_meta["conf"] != a_meta["conf"]:
         # 跨足联对阵，标注
         situ.append(f"跨洲对阵：{fav_zh}({h_meta['conf'] if fav==home else a_meta['conf']}) vs {_team_zh(away if fav==home else home)}({a_meta['conf'] if fav==home else h_meta['conf']})")
@@ -232,14 +236,14 @@ def generate_reasons(home, away, played_per_team, pred_hg, pred_ag, squads=None,
 
     # ---- 总评（基于融合胜率 fav_pct 给出结论）----
     is_draw = (pred_hg == pred_ag)
-    score_str = f"{pred_hg}-{pred_ag}"
+    score_str = f"{_team_zh(home)} {pred_hg}-{pred_ag} {_team_zh(away)}"
     if is_draw:
         if fav_pct < 45:
-            summary = f"两队势均力敌，预测 {score_str} 平局合理，胜负看临场。"
+            summary = f"两队势均力敌，预测 {score_str}，平局合理，胜负看临场。"
         else:
-            summary = f"虽 {fav_zh} 略占优(胜率{fav_pct}%)，但本场预测 {score_str} 平局，或有冷门空间。"
+            summary = f"虽 {fav_zh} 略占优(胜率{fav_pct}%)，但本场预测 {score_str}，或有冷门空间。"
     elif fav_pct < 45:
-        summary = f"两队势均力敌，预测 {fav_zh} {score_str} 小胜，但随时可能翻盘。"
+        summary = f"两队势均力敌，预测 {score_str}，但随时可能翻盘。"
     elif fav_pct < 60:
         summary = f"{fav_zh} 略占优(胜率{fav_pct}%)，预测 {score_str}，但并非稳赢。"
     elif fav_pct < 75:

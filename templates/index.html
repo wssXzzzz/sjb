@@ -153,6 +153,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text"
 .next-mid .pred{font-size:9px;font-weight:700;color:#2a6fd6;background:rgba(54,110,240,.14);padding:2px 7px;border-radius:7px;}
 .next-bar{height:7px;border-radius:7px;overflow:hidden;display:flex;margin:12px 0 5px;background:var(--chip);}
 .next-bar .h{background:linear-gradient(90deg,#2a6fd6,#4a8ef0);}
+.next-bar .d{background:linear-gradient(90deg,#aaa,#888);}
 .next-bar .a{background:linear-gradient(90deg,#e8826a,#d24b3e);}
 .next-bar-labels{display:flex;justify-content:space-between;font-size:10.5px;font-weight:600;}
 .next-bar-labels .hl{color:#2a6fd6;}
@@ -545,7 +546,7 @@ function predictHTML(){
   // 第一场做大卡（突出展示 + 完整理由）
   const first = upcoming[0];
   const rest = upcoming.slice(1);
-  const fhp = first.home_win, fap = first.away_win;
+  const fhp = first.home_win, fdp = first.draw, fap = first.away_win;
   const fr = first.reasons;
   // 第一场理由要点
   const fPoints = fr.points.map(p=>`<div class="rsn-pt">• ${p}</div>`).join('');
@@ -569,8 +570,8 @@ function predictHTML(){
         </div>
         <div class="next-side"><span class="flag">${first.away_flag}</span><span class="nm">${first.away_zh}</span></div>
       </div>
-      <div class="next-bar"><div class="h" style="width:${fhp}%"></div><div class="a" style="width:${fap}%"></div></div>
-      <div class="next-bar-labels"><span class="hl">${first.home_zh} ${fhp}%</span><span class="al">${first.away_zh} ${fap}%</span></div>
+      <div class="next-bar"><div class="h" style="width:${fhp}%"></div><div class="d" style="width:${fdp}%"></div><div class="a" style="width:${fap}%"></div></div>
+      <div class="next-bar-labels"><span class="hl">${first.home_zh} ${fhp}%</span><span>平 ${fdp}%</span><span class="al">${first.away_zh} ${fap}%</span></div>
       <div class="rsn-box rsn-big">
         <div class="rsn-h">📝 预测理由</div>
         ${fPoints}
@@ -908,10 +909,10 @@ function renderProbChart(){
     xAxis:{type:'value',max:100,axisLabel:{color:dark?'#8a93a8':'#888',formatter:'{value}%'},splitLine:{lineStyle:{color:dark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)'}}},
     yAxis:{type:'category',data:top.map(p=>p.flag+' '+p.zh),axisLabel:{color:dark?'#dfe4f0':'#333',fontSize:11}},
     series:[
-      {name:'16强',type:'bar',stack:'a',data:top.map(p=>p.r16),itemStyle:{color:dark?'#3a7a5a':'#9fd9bc'},barWidth:'60%'},
-      {name:'4强',type:'bar',stack:'a',data:top.map(p=>p.sf),itemStyle:{color:dark?'#3a82a8':'#a3cfdf'}},
-      {name:'决赛',type:'bar',stack:'a',data:top.map(p=>p.final),itemStyle:{color:dark?'#9a7ac0':'#cdb8e6'}},
-      {name:'夺冠',type:'bar',stack:'a',data:top.map(p=>p.title),itemStyle:{color:dark?'#4ecb82':'#1f8a52'}},
+      {name:'16强',type:'bar',data:top.map(p=>p.r16),itemStyle:{color:dark?'#3a7a5a':'#9fd9bc'},barWidth:'18%'},
+      {name:'4强',type:'bar',data:top.map(p=>p.sf),itemStyle:{color:dark?'#3a82a8':'#a3cfdf'}},
+      {name:'决赛',type:'bar',data:top.map(p=>p.final),itemStyle:{color:dark?'#9a7ac0':'#cdb8e6'}},
+      {name:'夺冠',type:'bar',data:top.map(p=>p.title),itemStyle:{color:dark?'#4ecb82':'#1f8a52'}},
     ]
   });
 }

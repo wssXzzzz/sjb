@@ -70,6 +70,7 @@ def test_upcoming_filters_past_kickoffs():
     res = app._build_upcoming(sim, {"matches": []}, None)
     assert len(res) == 1
     assert {res[0]["home"], res[0]["away"]} == {"Spain", "Ghana"}
+    assert 99 <= res[0]["home_win"] + res[0]["draw"] + res[0]["away_win"] <= 101
 
 
 def test_live_now_only_past_predicted():

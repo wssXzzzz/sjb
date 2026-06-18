@@ -67,17 +67,39 @@ def test_best_thirds_and_slot_assignment_respect_constraints():
 
 
 def test_monte_carlo_probabilities_are_consistent():
-    """蒙特卡洛：每队概率在 0~100，冠军概率之和约等于 100。"""
-    probs = P.monte_carlo(n=30)
+    """蒙特卡洛：概率满足阶段包含关系，且各阶段总额正确。"""
+    probs = P.monte_carlo(n=100)
     assert probs, "应返回非空概率表"
     for team, p in probs.items():
         for k in ("title", "final", "sf", "r16"):
             assert 0 <= p[k] <= 100
         # 进决赛概率不应低于夺冠概率
         assert p["final"] + 1e-9 >= p["title"]
+        assert p["sf"] + 1e-9 >= p["final"]
+        assert p["r16"] + 1e-9 >= p["sf"]
 
-    total_title = sum(p["title"] for p in probs.values())
-    assert abs(total_title - 100) < 5, f"冠军概率之和应≈100，实际 {total_title}"
+    expected_sums = {"title": 100, "final": 200, "sf": 400, "r16": 1600}
+    for stage, expected in expected_sums.items():
+        actual = sum(p[stage] for p in probs.values())
+        assert abs(actual - expected) < 5, f"{stage} 概率之和应≈{expected}，实际 {actual}"
+
+
+def test_real_results_preserve_score_direction_and_ignore_knockout():
+    """真实赛果保持 API 主客方向，反向赛程能正确对调，淘汰赛不会覆盖小组赛。"""
+    live = {"matches": [
+        {"team1": "Ghana", "team2": "England", "finished": True,
+         "is_knockout": False, "hg": 1, "ag": 3},
+        {"team1": "Ghana", "team2": "England", "finished": True,
+         "is_knockout": True, "hg": 2, "ag": 0},
+    ]}
+    idx = LD.real_results_index(live)
+    assert idx == {("Ghana", "England"): (1, 3)}
+
+    rng = random.Random(1)
+    _, matches, _ = P.simulate_groups(rng, real_index=idx)
+    match = next(m for m in matches if {m["home"], m["away"]} == {"Ghana", "England"})
+    assert (match["home"], match["away"]) == ("England", "Ghana")
+    assert (match["hg"], match["ag"]) == (3, 1)
 
 
 def test_predicted_scoreline_is_deterministic_and_favours_stronger():

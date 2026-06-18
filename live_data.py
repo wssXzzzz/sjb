@@ -213,11 +213,11 @@ def _fetch_api():
 
 
 def real_results_index(live):
-    """把已踢比赛整理成 {(t1,t2)frozenset): (hg,ag)} 便于查询"""
+    """把已踢小组赛整理成 {(主队,客队): (主队进球,客队进球)}。"""
     idx = {}
     for m in live["matches"]:
-        if m["finished"] and m["hg"] is not None:
-            idx[frozenset((m["team1"], m["team2"]))] = (m["hg"], m["ag"])
+        if m["finished"] and m["hg"] is not None and not m.get("is_knockout"):
+            idx[(m["team1"], m["team2"])] = (m["hg"], m["ag"])
     return idx
 
 
